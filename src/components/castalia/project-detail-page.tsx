@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ArrowLeft, MapPin, Calendar, Image, CheckSquare, MessageSquare, FileText, Clock, Camera, X, ChevronLeft, ChevronRight, Pencil, Trash2, Eraser } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -44,9 +44,27 @@ export default function ProjectDetailPage() {
   const [drawMode, setDrawMode] = useState(false)
   const [drawColor, setDrawColor] = useState('#ef4444')
   const [isDrawing, setIsDrawing] = useState(false)
-  const drawCanvasRef = useState<HTMLCanvasElement | null>(null)
+  const drawCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const lastDrawPos = useRef<{ x: number; y: number } | null>(null)
   const drawImgLoaded = useRef(false)
+
+  const getTags = (p: ApiPhoto) => {
+    try { return JSON.parse(p.tags || '[]') } catch { return (p.tags || '').split(',').filter(Boolean) }
+  }
+  const getPhase = (p: ApiPhoto) => { const t = getTags(p); return t.includes('antes') ? 'antes' : t.includes('despues') ? 'despues' : null }
+  const getLocal = (p: ApiPhoto) => { const t = getTags(p); const loc = t.find(t => t.startsWith('local:')); return loc ? loc.replace('local:', '') : null }
+
+  const allLocales = [...new Set(photos.map(p => getLocal(p)).filter(Boolean))]
+  const beforePhotos = photos.filter(p => getPhase(p) === 'antes')
+  const afterPhotos = photos.filter(p => getPhase(p) === 'despues')
+
+  const filteredPhotos = tagFilter === 'ALL'
+    ? photos
+    : tagFilter === 'antes'
+    ? beforePhotos
+    : tagFilter === 'despues'
+    ? afterPhotos
+    : photos.filter(p => getLocal(p) === tagFilter)
 
   useEffect(() => {
     if (!selectedProjectId) return
@@ -68,42 +86,29 @@ export default function ProjectDetailPage() {
   }, [selectedProjectId])
 
   // Close lightbox on escape
+  const photoCountRef = useRef(filteredPhotos.length)
+  photoCountRef.current = filteredPhotos.length
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { setLightboxIdx(null); setDrawMode(false); }
       if (lightboxIdx !== null) {
-        if (e.key === 'ArrowRight') setLightboxIdx((lightboxIdx + 1) % filteredPhotos.length)
-        if (e.key === 'ArrowLeft') setLightboxIdx((lightboxIdx - 1 + filteredPhotos.length) % filteredPhotos.length)
+        const count = photoCountRef.current
+        if (count > 0) {
+          if (e.key === 'ArrowRight') setLightboxIdx((lightboxIdx + 1) % count)
+          if (e.key === 'ArrowLeft') setLightboxIdx((lightboxIdx - 1 + count) % count)
+        }
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [lightboxIdx, filteredPhotos.length])
-
-  const getTags = (p: ApiPhoto) => {
-    try { return JSON.parse(p.tags || '[]') } catch { return (p.tags || '').split(',').filter(Boolean) }
-  }
-  const getPhase = (p: ApiPhoto) => { const t = getTags(p); return t.includes('antes') ? 'antes' : t.includes('despues') ? 'despues' : null }
-  const getLocal = (p: ApiPhoto) => { const t = getTags(p); const loc = t.find(t => t.startsWith('local:')); return loc ? loc.replace('local:', '') : null }
-
-  const allLocales = [...new Set(photos.map(p => getLocal(p)).filter(Boolean))]
-  const beforePhotos = photos.filter(p => getPhase(p) === 'antes')
-  const afterPhotos = photos.filter(p => getPhase(p) === 'despues')
-
-  const filteredPhotos = tagFilter === 'ALL'
-    ? photos
-    : tagFilter === 'antes'
-    ? beforePhotos
-    : tagFilter === 'despues'
-    ? afterPhotos
-    : photos.filter(p => getLocal(p) === tagFilter)
+  }, [lightboxIdx])
 
   const completedTasks = tasks.filter(t => t.status === 'COMPLETED').length
   const taskProgress = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0
 
   // Draw handlers for lightbox
-  const initDrawCanvas = () => {
-    const canvas = drawCanvasRef
+  const initDrawCanvas = useCallback(() => {
+    const canvas = drawCanvasRef.current
     if (!canvas || lightboxIdx === null) return
     const photo = filteredPhotos[lightboxIdx]
     if (!photo) return
@@ -116,6 +121,14 @@ export default function ProjectDetailPage() {
       drawImgLoaded.current = true
     }
     img.src = photo.url
+  }, [lightboxIdx, filteredPhotos])
+
+  const getDrawPos = (e: React.MouseEvent | React.TouchEvent) => {
+    const canvas = drawCanvasRef.current
+    const rect = canvas.getBoundingClientRect()
+    const scaleX = canvas.width / rect.width; const scaleY = canvas.height / rect.height
+    if ('touches' in e) return { x: (e.touches[0].clientX - rect.left) * scaleX, y: (e.touches[0].clientY - rect.top) * scaleY }
+    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY }
   }
 
   const handleDrawStart = (e: React.MouseEvent | React.TouchEvent) => {
@@ -123,23 +136,16 @@ export default function ProjectDetailPage() {
     const pos = getDrawPos(e); lastDrawPos.current = pos
   }
   const handleDrawMove = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDrawing || !lastDrawPos.current || !drawCanvasRef) return
+    const canvas = drawCanvasRef.current
+    if (!isDrawing || !lastDrawPos.current || !canvas) return
     e.preventDefault()
-    const ctx = drawCanvasRef.getContext('2d')!
+    const ctx = canvas.getContext('2d')!
     const pos = getDrawPos(e)
     ctx.beginPath(); ctx.moveTo(lastDrawPos.current.x, lastDrawPos.current.y); ctx.lineTo(pos.x, pos.y)
     ctx.strokeStyle = drawColor; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke()
     lastDrawPos.current = pos
   }
   const handleDrawEnd = () => { setIsDrawing(false); lastDrawPos.current = null }
-
-  const getDrawPos = (e: React.MouseEvent | React.TouchEvent) => {
-    const canvas = drawCanvasRef!
-    const rect = canvas.getBoundingClientRect()
-    const scaleX = canvas.width / rect.width; const scaleY = canvas.height / rect.height
-    if ('touches' in e) return { x: (e.touches[0].clientX - rect.left) * scaleX, y: (e.touches[0].clientY - rect.top) * scaleY }
-    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY }
-  }
 
   const deletePhoto = async (photoId: string) => {
     try {
