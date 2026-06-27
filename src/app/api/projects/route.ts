@@ -36,14 +36,22 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, clientName, address, city, state, description, status, priority, startDate, estimatedEnd, latitude, longitude, creatorId } = body
+    const { name, creatorId, coverImage } = body
 
-    if (!name || !clientName || !address || !creatorId) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    if (!name || !creatorId) {
+      return NextResponse.json({ error: 'Se requiere nombre del proyecto' }, { status: 400 })
     }
 
     const project = await db.project.create({
-      data: { name, clientName, address, city, state, description, status: status || 'ACTIVE', priority: priority || 'MEDIUM', startDate: startDate ? new Date(startDate) : null, estimatedEnd: estimatedEnd ? new Date(estimatedEnd) : null, latitude, longitude, creatorId },
+      data: {
+        name: name.trim(),
+        clientName: name.trim(),
+        address: '',
+        status: 'ACTIVE',
+        priority: 'MEDIUM',
+        coverImage: coverImage || null,
+        creatorId,
+      },
     })
 
     await db.projectMember.create({ data: { projectId: project.id, userId: creatorId, role: 'MANAGER' } })

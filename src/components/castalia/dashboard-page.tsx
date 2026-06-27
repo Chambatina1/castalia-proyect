@@ -44,7 +44,7 @@ function getAvatarStyle(i: number) { return { background: `linear-gradient(135de
 
 // ─── Component ─────────────────────────────────────────
 export default function DashboardPage() {
-  const { currentUser, navigateTo, logout, mobileMenuOpen, setMobileMenuOpen, isManagerOrAdmin } = useAppStore()
+  const { currentUser, navigateTo, logout, mobileMenuOpen, setMobileMenuOpen, isManagerOrAdmin, selectProject } = useAppStore()
   const { toast } = useToast()
 
   const [projects, setProjects] = useState<ApiProject[]>([])
@@ -55,6 +55,7 @@ export default function DashboardPage() {
   const [priorityFilter, setPriorityFilter] = useState('ALL')
   const [searchOpen, setSearchOpen] = useState(false)
   const [showCreateProject, setShowCreateProject] = useState(false)
+  const [expandedStat, setExpandedStat] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadData() {
@@ -216,28 +217,62 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          {/* Stats */}
+          {/* Stats - expandibles */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-8">
             {[
-              { label: 'Proyectos Activos', value: stats.active, icon: Building2, color: '#38C5B5', bg: 'rgba(56,197,181,0.08)', trend: '+2 esta semana' },
-              { label: 'Fotos Totales', value: stats.totalPhotos, icon: Camera, color: '#2DA194', bg: 'rgba(45,161,148,0.08)', trend: '+48 esta semana' },
-              { label: 'Tareas Pendientes', value: stats.pendingTasks, icon: CheckSquare, color: '#F0A030', bg: 'rgba(240,160,48,0.08)', trend: '3 vencidas' },
-              { label: 'Reportes', value: stats.totalReports, icon: FileText, color: '#5D7380', bg: 'rgba(93,115,128,0.08)', trend: '+1 nuevo' },
+              { key: 'active', label: 'Proyectos Activos', value: stats.active, icon: Building2, color: '#38C5B5', bg: 'rgba(56,197,181,0.08)' },
+              { key: 'photos', label: 'Fotos Totales', value: stats.totalPhotos, icon: Camera, color: '#2DA194', bg: 'rgba(45,161,148,0.08)' },
+              { key: 'tasks', label: 'Tareas Pendientes', value: stats.pendingTasks, icon: CheckSquare, color: '#F0A030', bg: 'rgba(240,160,48,0.08)' },
+              { key: 'reports', label: 'Reportes', value: stats.totalReports, icon: FileText, color: '#5D7380', bg: 'rgba(93,115,128,0.08)' },
             ].map((stat) => (
-              <Card key={stat.label} className="border-0 shadow-sm hover:shadow-md transition-shadow duration-200"
+              <Card key={stat.key} onClick={() => setExpandedStat(expandedStat === stat.key ? null : stat.key)}
+                className="border-0 shadow-sm hover:shadow-md transition-shadow duration-200 cursor-pointer"
                 style={{ background: '#FFFFFF' }}>
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between mb-3">
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: stat.bg }}>
                       <stat.icon className="w-5 h-5" style={{ color: stat.color }} strokeWidth={1.8} />
                     </div>
-                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full"
-                      style={{ background: 'rgba(56,197,181,0.08)', color: '#2DA194' }}>
-                      {stat.trend}
+                    <span className="text-[11px] font-medium" style={{ color: '#ADB5B7' }}>
+                      {expandedStat === stat.key ? '▲' : '▼'}
                     </span>
                   </div>
                   <p className="text-[28px] lg:text-[32px] font-bold tracking-tight" style={{ color: '#1A2332' }}>{stat.value}</p>
                   <p className="text-[13px] font-medium mt-0.5" style={{ color: '#5D7380' }}>{stat.label}</p>
+                  <AnimatePresence>
+                    {expandedStat === stat.key && (
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                        <div className="pt-3 mt-3 border-t" style={{ borderColor: '#EDF0F4' }}>
+                          {stat.key === 'active' && (
+                            <div className="space-y-2">
+                              {projects.filter(p => p.status === 'ACTIVE').slice(0, 5).map(p => (
+                                <div key={p.id} onClick={(e) => { e.stopPropagation(); navigateTo('project-detail', p.id); selectProject(p as any); }} className="flex items-center gap-2 p-2 rounded-lg hover:bg-black/5 cursor-pointer">
+                                  <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0"><img src={p.coverImage || ''} alt="" className="w-full h-full object-cover" /></div>
+                                  <p className="text-[12px] font-medium truncate" style={{ color: '#35414A' }}>{p.name}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {stat.key === 'photos' && (
+                            <div className="space-y-2">
+                              {projects.filter(p => p._count.photos > 0).sort((a,b) => b._count.photos - a._count.photos).slice(0, 5).map(p => (
+                                <div key={p.id} onClick={(e) => { e.stopPropagation(); navigateTo('project-detail', p.id); selectProject(p as any); }} className="flex items-center justify-between p-2 rounded-lg hover:bg-black/5 cursor-pointer">
+                                  <p className="text-[12px] font-medium truncate" style={{ color: '#35414A' }}>{p.name}</p>
+                                  <span className="text-[11px] font-bold" style={{ color: stat.color }}>{p._count.photos}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {stat.key === 'tasks' && (
+                            <p className="text-[12px]" style={{ color: '#5D7380' }}>Toca un proyecto para ver sus tareas</p>
+                          )}
+                          {stat.key === 'reports' && (
+                            <p className="text-[12px]" style={{ color: '#5D7380' }}>No hay reportes generados aún</p>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </CardContent>
               </Card>
             ))}

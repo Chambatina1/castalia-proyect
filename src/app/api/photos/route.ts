@@ -78,8 +78,7 @@ export async function POST(request: NextRequest) {
       const formData = await request.formData();
 
       projectId = formData.get('projectId') as string || '';
-      caption = formData.get('caption') as string || '';
-      tags = formData.get('tags') as string || '';
+      const fase = formData.get('fase') as string || '';
       isUrgent = formData.get('isUrgent') as string || 'false';
       uploadedBy = formData.get('uploadedBy') as string || '';
 
@@ -100,7 +99,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Project not found' }, { status: 404 });
       }
 
-      for (const file of files) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const note = (formData.get(`note_${i}`) as string) || '';
+        const place = (formData.get(`place_${i}`) as string) || '';
+
         const ext = getExtension(file.type);
         const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
         const filepath = join(UPLOAD_DIR, filename);
@@ -111,7 +114,17 @@ export async function POST(request: NextRequest) {
         const url = `/api/photos/serve/${filename}`;
         savedUrls.push(url);
 
-        // Create photo record in DB
+        // Build tags from fase + place
+        const tagArr: string[] = [];
+        if (fase) tagArr.push(fase);
+        if (place) tagArr.push(`local:${place}`);
+
+        // Build caption from note + place
+        const parts: string[] = [];
+        if (place) parts.push(place);
+        if (note) parts.push(note);
+        const photoCaption = parts.join(' — ') || null;
+
         const photo = await db.photo.create({
           data: {
             projectId,
@@ -120,8 +133,8 @@ export async function POST(request: NextRequest) {
             fileName: file.name || filename,
             fileSize: file.size,
             fileType: file.type.startsWith('image/') ? 'image' : 'video',
-            tags: tags || '',
-            caption: caption || null,
+            tags: JSON.stringify(tagArr),
+            caption: photoCaption,
             isUrgent: isUrgent === 'true',
           },
           include: {
