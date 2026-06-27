@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.gitignore
+*.md
+.DS_Store
+bun.lock
+dev.log
+server.log
+tool-results
+scripts
+examples
+.env
+.env.local
