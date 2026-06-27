@@ -40,6 +40,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import PhotoUploadModal from '@/components/castalia/photo-upload-modal';
+import PhotoLightbox from '@/components/castalia/photo-lightbox';
 
 // ─── Nav Items ───────────────────────────────────────────────────────────────
 
@@ -594,6 +596,10 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         {/* ── Mobile Bottom Nav ── */}
         <MobileBottomNav />
+
+        {/* ── Global Modals ── */}
+        <PhotoUploadModal />
+        <PhotoLightbox />
       </div>
     </TooltipProvider>
   );

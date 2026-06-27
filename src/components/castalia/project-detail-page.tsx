@@ -107,7 +107,7 @@ export default function ProjectDetailPage() {
               {project?.clientName || ''}
             </p>
           </div>
-          {isManagerOrAdmin() && (
+          {currentUser && (
             <Button onClick={() => openUploadModal(selectedProjectId || '')} className="h-10 px-5 rounded-xl text-[13px] font-semibold text-white border-0 gap-2"
               style={{ background: 'linear-gradient(135deg, #38C5B5, #2DA194)' }}>
               <Camera className="w-4 h-4" strokeWidth={2.5} />
