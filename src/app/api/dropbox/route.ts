@@ -452,6 +452,46 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(result);
     }
 
+    // ─── DEBUG SYNC (shows what DB has vs what files exist) ───
+    if (action === 'debug-sync') {
+      const { projectId } = body;
+      const photos = await db.photo.findMany({
+        where: projectId ? { projectId } : undefined,
+        select: { id: true, url: true, fileName: true, projectId: true, subProductId: true },
+        take: 20,
+      });
+
+      let uploadFiles: string[] = [];
+      try {
+        if (existsSync(UPLOAD_DIR)) {
+          uploadFiles = readdirSync(UPLOAD_DIR);
+        }
+      } catch {}
+
+      const photoDebug = photos.map(p => {
+        const filename = extractFilename(p.url);
+        const localPath = getLocalPhotoPath(p.url);
+        const fileExists = existsSync(localPath);
+        return {
+          id: p.id,
+          url: p.url,
+          fileName: p.fileName,
+          extractedFilename: filename,
+          localPath,
+          fileExists,
+          subProductId: p.subProductId,
+        };
+      });
+
+      return NextResponse.json({
+        uploadDir: UPLOAD_DIR,
+        uploadFileCount: uploadFiles.length,
+        uploadFilesSample: uploadFiles.slice(0, 10),
+        photoCount: photos.length,
+        photos: photoDebug,
+      });
+    }
+
     // ─── GET BACKUP LIST ───
     if (action === 'list-backups') {
       const config = await loadConfig();
