@@ -38,7 +38,6 @@ export default function ProjectDetailPage() {
   const [activity, setActivity] = useState<ApiActivity[]>([])
   const [activeTab, setActiveTab] = useState('gallery')
   const [tagFilter, setTagFilter] = useState('ALL')
-  const [subFilter, setSubFilter] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Fullscreen lightbox
@@ -82,6 +81,7 @@ export default function ProjectDetailPage() {
 
   // SubProducts
   const [subProducts, setSubProducts] = useState<SubProduct[]>([])
+  const [selectedSubId, setSelectedSubId] = useState<string | null>(null)
   const [newSubName, setNewSubName] = useState('')
   const [showNewSub, setShowNewSub] = useState(false)
   const [renamingSubId, setRenamingSubId] = useState<string | null>(null)
@@ -97,16 +97,29 @@ export default function ProjectDetailPage() {
   const afterPhotos = photos.filter(p => getPhase(p) === 'despues')
 
   const filteredPhotos = useMemo(() => {
-    let result = tagFilter === 'ALL'
-      ? photos
-      : tagFilter === 'antes'
-      ? beforePhotos
-      : tagFilter === 'despues'
-      ? afterPhotos
-      : photos.filter(p => getLocal(p) === tagFilter)
-    if (subFilter) result = result.filter(p => p.subProductId === subFilter)
+    let result = photos
+    // If inside a subproduct, only show its photos
+    if (selectedSubId) {
+      result = result.filter(p => p.subProductId === selectedSubId)
+    }
+    // Tag filter (ANTES/DESPUÉS) only applies within subproduct or when no sub selected
+    if (!selectedSubId) {
+      if (tagFilter === 'antes') result = beforePhotos
+      else if (tagFilter === 'despues') result = afterPhotos
+      else if (tagFilter !== 'ALL') result = photos.filter(p => getLocal(p) === tagFilter)
+    }
     return result
-  }, [photos, tagFilter, subFilter, beforePhotos, afterPhotos])
+  }, [photos, tagFilter, selectedSubId, beforePhotos, afterPhotos])
+
+  const selectedSub = subProducts.find(s => s.id === selectedSubId) || null
+  // Get cover photo for each subproduct
+  const subCoverMap = useMemo(() => {
+    const map = new Map<string, ApiPhoto>()
+    for (const p of photos) {
+      if (p.subProductId && !map.has(p.subProductId)) map.set(p.subProductId, p)
+    }
+    return map
+  }, [photos])
 
   const loadPhotos = useCallback(async () => {
     if (!selectedProjectId) return
@@ -145,7 +158,7 @@ export default function ProjectDetailPage() {
     try {
       await fetch(`/api/subproducts?id=${id}`, { method: 'DELETE' })
       setSubProducts(prev => prev.filter(s => s.id !== id))
-      if (subFilter === id) setSubFilter(null)
+      if (selectedSubId === id) setSelectedSubId(null)
       toast({ title: 'Subproducto eliminado' })
     } catch { toast({ title: 'Error', variant: 'destructive' }) }
   }
@@ -173,7 +186,8 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     if (!selectedProjectId) return
     setLoading(true)
-    setSubFilter(null)
+    setSelectedSubId(null)
+    setTagFilter('ALL')
     Promise.allSettled([
       fetch(`/api/projects/${selectedProjectId}`).then(r => r.json()),
       fetch(`/api/photos?projectId=${selectedProjectId}`).then(r => r.json()),
