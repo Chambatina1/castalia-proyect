@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, MapPin, Calendar, Image, CheckSquare, MessageSquare, FileText, Clock, Camera, X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Pencil, Trash2, Eraser, Download, Share2, Copy, CheckCircle, ImagePlus, Link2, GripVertical, Save, StickyNote } from 'lucide-react'
+import { ArrowLeft, MapPin, Calendar, Image, CheckSquare, MessageSquare, FileText, Clock, Camera, X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Pencil, Trash2, Eraser, Download, Share2, Copy, CheckCircle, ImagePlus, Link2, GripVertical, Save, StickyNote, Plus, FolderOpen, Folder, ChevronRight as ChevronRightIcon } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ interface ApiPhoto {
   id: string; url: string; thumbnailUrl?: string; caption?: string; tags?: string
   uploadedBy: { id: string; name: string; avatar?: string }
   isApproved: boolean; isVisibleToClient: boolean; isUrgent: boolean; createdAt: string
+  subProductId?: string | null
 }
 interface ApiTask {
   id: string; title: string; status: string; priority: string
@@ -22,6 +23,9 @@ interface ApiTask {
 }
 interface ApiActivity {
   id: string; action: string; user: { id: string; name: string }; details?: string; createdAt: string
+}
+interface SubProduct {
+  id: string; name: string; sortOrder: number; _count: { photos: number }
 }
 
 export default function ProjectDetailPage() {
@@ -34,6 +38,7 @@ export default function ProjectDetailPage() {
   const [activity, setActivity] = useState<ApiActivity[]>([])
   const [activeTab, setActiveTab] = useState('gallery')
   const [tagFilter, setTagFilter] = useState('ALL')
+  const [subFilter, setSubFilter] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Fullscreen lightbox
@@ -75,6 +80,14 @@ export default function ProjectDetailPage() {
   const [reorderMode, setReorderMode] = useState(false)
   const [localPhotos, setLocalPhotos] = useState<ApiPhoto[]>([])
 
+  // SubProducts
+  const [subProducts, setSubProducts] = useState<SubProduct[]>([])
+  const [newSubName, setNewSubName] = useState('')
+  const [showNewSub, setShowNewSub] = useState(false)
+  const [renamingSubId, setRenamingSubId] = useState<string | null>(null)
+  const [renameSubValue, setRenameSubValue] = useState('')
+  const [assigningSubPhotoId, setAssigningSubPhotoId] = useState<string | null>(null)
+
   const getTags = (p: ApiPhoto) => { try { return JSON.parse(p.tags || '[]') } catch { return (p.tags || '').split(',').filter(Boolean) } }
   const getPhase = (p: ApiPhoto) => { const t = getTags(p); return t.includes('antes') ? 'antes' : t.includes('despues') ? 'despues' : null }
   const getLocal = (p: ApiPhoto) => { const t = getTags(p); const loc = t.find(t => t.startsWith('local:')); return loc ? loc.replace('local:', '') : null }
@@ -83,35 +96,98 @@ export default function ProjectDetailPage() {
   const beforePhotos = photos.filter(p => getPhase(p) === 'antes')
   const afterPhotos = photos.filter(p => getPhase(p) === 'despues')
 
-  const filteredPhotos = tagFilter === 'ALL'
-    ? photos
-    : tagFilter === 'antes'
-    ? beforePhotos
-    : tagFilter === 'despues'
-    ? afterPhotos
-    : photos.filter(p => getLocal(p) === tagFilter)
+  const filteredPhotos = useMemo(() => {
+    let result = tagFilter === 'ALL'
+      ? photos
+      : tagFilter === 'antes'
+      ? beforePhotos
+      : tagFilter === 'despues'
+      ? afterPhotos
+      : photos.filter(p => getLocal(p) === tagFilter)
+    if (subFilter) result = result.filter(p => p.subProductId === subFilter)
+    return result
+  }, [photos, tagFilter, subFilter, beforePhotos, afterPhotos])
 
   const loadPhotos = useCallback(async () => {
     if (!selectedProjectId) return
     const phRes = await fetch(`/api/photos?projectId=${selectedProjectId}`).then(r => r.json())
-    if (Array.isArray(phRes?.photos)) setPhotos(phRes.photos.map((p: any) => ({ ...p, uploadedBy: p.uploader })))
+    if (Array.isArray(phRes?.photos)) setPhotos(phRes.photos.map((p: any) => ({ ...p, uploadedBy: p.uploader, subProductId: p.subProductId })))
   }, [selectedProjectId])
+
+  const loadSubProducts = useCallback(async () => {
+    if (!selectedProjectId) return
+    const res = await fetch(`/api/subproducts?projectId=${selectedProjectId}`).then(r => r.json())
+    if (Array.isArray(res?.subProducts)) setSubProducts(res.subProducts)
+  }, [selectedProjectId])
+
+  // ─── SubProduct CRUD ───
+  const createSubProduct = async () => {
+    if (!selectedProjectId || !newSubName.trim()) return
+    try {
+      const res = await fetch('/api/subproducts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: selectedProjectId, name: newSubName.trim() }) })
+      if (!res.ok) { const e = await res.json(); toast({ title: e.error || 'Error', variant: 'destructive' }); return }
+      const { subProduct } = await res.json()
+      setSubProducts(prev => [...prev, { ...subProduct, _count: { photos: 0 } }])
+      setNewSubName(''); setShowNewSub(false)
+      toast({ title: `"${subProduct.name}" creado` })
+    } catch { toast({ title: 'Error al crear', variant: 'destructive' }) }
+  }
+  const renameSubProduct = async (id: string) => {
+    if (!renameSubValue.trim()) return
+    try {
+      await fetch('/api/subproducts', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, name: renameSubValue.trim() }) })
+      setSubProducts(prev => prev.map(s => s.id === id ? { ...s, name: renameSubValue.trim() } : s))
+      setRenamingSubId(null)
+      toast({ title: 'Subproducto renombrado' })
+    } catch { toast({ title: 'Error', variant: 'destructive' }) }
+  }
+  const deleteSubProduct = async (id: string) => {
+    try {
+      await fetch(`/api/subproducts?id=${id}`, { method: 'DELETE' })
+      setSubProducts(prev => prev.filter(s => s.id !== id))
+      if (subFilter === id) setSubFilter(null)
+      toast({ title: 'Subproducto eliminado' })
+    } catch { toast({ title: 'Error', variant: 'destructive' }) }
+  }
+  const moveSubProduct = async (idx: number, dir: -1 | 1) => {
+    const newIdx = idx + dir
+    if (newIdx < 0 || newIdx >= subProducts.length) return
+    const arr = [...subProducts]
+    ;[arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]]
+    setSubProducts(arr)
+    try {
+      await fetch('/api/subproducts', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: arr.map((s, i) => ({ id: s.id, sortOrder: i })) }) })
+    } catch { toast({ title: 'Error al reordenar', variant: 'destructive' }) }
+  }
+  const assignPhotoToSub = async (photoId: string, subProductId: string | null) => {
+    try {
+      await fetch(`/api/photos/${photoId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subProductId }) })
+      setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, subProductId } : p))
+      setAssigningSubPhotoId(null)
+      // Refresh subproduct counts
+      loadSubProducts()
+      toast({ title: subProductId ? 'Foto asignada' : 'Foto desasignada' })
+    } catch { toast({ title: 'Error', variant: 'destructive' }) }
+  }
 
   useEffect(() => {
     if (!selectedProjectId) return
     setLoading(true)
+    setSubFilter(null)
     Promise.allSettled([
       fetch(`/api/projects/${selectedProjectId}`).then(r => r.json()),
       fetch(`/api/photos?projectId=${selectedProjectId}`).then(r => r.json()),
       fetch(`/api/tasks?projectId=${selectedProjectId}`).then(r => r.json()),
       fetch(`/api/activity?projectId=${selectedProjectId}&limit=20`).then(r => r.json()),
-    ]).then(([pRes, phRes, tRes, aRes]) => {
+      fetch(`/api/subproducts?projectId=${selectedProjectId}`).then(r => r.json()),
+    ]).then(([pRes, phRes, tRes, aRes, sRes]) => {
       if (pRes.status === 'fulfilled' && pRes.value?.project?.id) setProject(pRes.value.project)
       if (phRes.status === 'fulfilled' && Array.isArray(phRes.value?.photos)) {
-        setPhotos(phRes.value.photos.map((p: any) => ({ ...p, uploadedBy: p.uploader })))
+        setPhotos(phRes.value.photos.map((p: any) => ({ ...p, uploadedBy: p.uploader, subProductId: p.subProductId })))
       }
       if (tRes.status === 'fulfilled' && Array.isArray(tRes.value)) setTasks(tRes.value)
       if (aRes.status === 'fulfilled' && Array.isArray(aRes.value)) setActivity(aRes.value)
+      if (sRes.status === 'fulfilled' && Array.isArray(sRes.value?.subProducts)) setSubProducts(sRes.value.subProducts)
       setLoading(false)
     })
   }, [selectedProjectId])
@@ -418,7 +494,7 @@ export default function ProjectDetailPage() {
         </div>
 
         {/* Gallery upload buttons (secondary) */}
-        <div className="flex gap-2 mb-6">
+        <div className="flex gap-2 mb-4">
           <button onClick={() => { setPendingPhase('antes'); galleryRef.current?.click() }} disabled={uploading}
             className="flex-1 h-9 rounded-lg text-[12px] font-semibold border flex items-center justify-center gap-1.5 disabled:opacity-50"
             style={{ borderColor: '#F0A030', color: '#92400E', background: '#FFFBF5' }}>
@@ -436,6 +512,113 @@ export default function ProjectDetailPage() {
               <Download className="w-3.5 h-3.5" />
               {selectedIds.size > 0 ? `Descargar ${selectedIds.size}` : 'Cancelar'}
             </button>
+          )}
+        </div>
+
+        {/* ─── SubProductos Section ─── */}
+        <div className="mb-6 rounded-xl border overflow-hidden" style={{ borderColor: '#E2E6EB', background: '#FFFFFF' }}>
+          <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: '#EDF0F4' }}>
+            <div className="flex items-center gap-2">
+              <FolderOpen className="w-4 h-4" style={{ color: '#38C5B5' }} />
+              <span className="text-[13px] font-bold" style={{ color: '#1A2332' }}>Subproductos</span>
+              {subProducts.length > 0 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-md font-bold" style={{ background: '#F0FDFA', color: '#38C5B5' }}>{subProducts.length}</span>
+              )}
+            </div>
+            <button onClick={() => setShowNewSub(!showNewSub)} className="flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-semibold border transition-colors"
+              style={{ borderColor: '#E2E6EB', color: '#38C5B5', background: showNewSub ? '#F0FDFA' : 'white' }}>
+              <Plus className="w-3 h-3" /> Nuevo
+            </button>
+          </div>
+
+          {/* New subproduct input */}
+          <AnimatePresence>
+            {showNewSub && (
+              <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-b" style={{ borderColor: '#EDF0F4' }}>
+                <div className="flex gap-2 px-4 py-3">
+                  <input value={newSubName} onChange={e => setNewSubName(e.target.value)} onKeyDown={e => e.key === 'Enter' && createSubProduct()}
+                    placeholder="Nombre del subproducto..."
+                    className="flex-1 h-9 px-3 rounded-lg border text-[13px] focus:outline-none focus:border-[#38C5B5]/50"
+                    style={{ borderColor: '#E2E6EB', color: '#1A2332' }} autoFocus />
+                  <button onClick={createSubProduct} disabled={!newSubName.trim()}
+                    className="h-9 px-4 rounded-lg text-[12px] font-bold text-white disabled:opacity-40"
+                    style={{ background: '#38C5B5' }}>Crear</button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Subproduct list */}
+          <div className="max-h-[300px] overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {/* "Todas" filter option */}
+            <div onClick={() => setSubFilter(null)} className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer transition-colors"
+              style={{ background: subFilter === null ? '#F0FDFA' : 'transparent' }}>
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: subFilter === null ? '#38C5B5' : '#F3F4F6' }}>
+                <Image className="w-3.5 h-3.5" style={{ color: subFilter === null ? 'white' : '#9CA3AF' }} />
+              </div>
+              <span className="text-[12px] font-semibold flex-1" style={{ color: subFilter === null ? '#115E59' : '#35414A' }}>Todas las fotos</span>
+              <span className="text-[11px] font-mono" style={{ color: '#ADB5B7' }}>{photos.length}</span>
+            </div>
+
+            {subProducts.map((sub, idx) => (
+              <div key={sub.id} className="flex items-center gap-1 px-2 py-1.5 group/sub">
+                {/* Reorder arrows */}
+                <div className="flex flex-col gap-px shrink-0 opacity-0 group-hover/sub:opacity-100 transition-opacity">
+                  <button onClick={(e) => { e.stopPropagation(); moveSubProduct(idx, -1) }} disabled={idx === 0}
+                    className="w-5 h-5 flex items-center justify-center rounded hover:bg-black/10 disabled:opacity-20">
+                    <ChevronUp className="w-3 h-3" style={{ color: '#5D7380' }} />
+                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); moveSubProduct(idx, 1) }} disabled={idx === subProducts.length - 1}
+                    className="w-5 h-5 flex items-center justify-center rounded hover:bg-black/10 disabled:opacity-20">
+                    <ChevronDown className="w-3 h-3" style={{ color: '#5D7380' }} />
+                  </button>
+                </div>
+                {/* Name row */}
+                {renamingSubId === sub.id ? (
+                  <input value={renameSubValue} onChange={e => setRenameSubValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') renameSubProduct(sub.id); if (e.key === 'Escape') setRenamingSubId(null) }}
+                    onBlur={() => renameSubProduct(sub.id)}
+                    className="flex-1 min-w-0 h-7 px-2 rounded-md border text-[12px] font-semibold focus:outline-none"
+                    style={{ borderColor: '#38C5B5', color: '#1A2332' }} autoFocus />
+                ) : (
+                  <div onClick={() => setSubFilter(subFilter === sub.id ? null : sub.id)}
+                    className="flex items-center gap-2 flex-1 min-w-0 px-2 py-1 rounded-lg cursor-pointer transition-colors"
+                    style={{ background: subFilter === sub.id ? '#F0FDFA' : 'transparent' }}>
+                    <Folder className="w-4 h-4 shrink-0" style={{ color: subFilter === sub.id ? '#38C5B5' : '#9CA3AF' }} />
+                    <span className="text-[12px] font-semibold truncate" style={{ color: subFilter === sub.id ? '#115E59' : '#35414A' }}>{sub.name}</span>
+                    <span className="text-[10px] font-mono shrink-0" style={{ color: '#ADB5B7' }}>{sub._count.photos}</span>
+                  </div>
+                )}
+                {/* Actions */}
+                <button onClick={(e) => { e.stopPropagation(); setRenamingSubId(sub.id); setRenameSubValue(sub.name) }}
+                  className="w-6 h-6 rounded flex items-center justify-center opacity-0 group-hover/sub:opacity-100 hover:bg-black/10 transition-opacity shrink-0">
+                  <Pencil className="w-3 h-3" style={{ color: '#5D7380' }} />
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); deleteSubProduct(sub.id) }}
+                  className="w-6 h-6 rounded flex items-center justify-center opacity-0 group-hover/sub:opacity-100 hover:bg-red-50 transition-opacity shrink-0">
+                  <Trash2 className="w-3 h-3" style={{ color: '#E12E2E' }} />
+                </button>
+              </div>
+            ))}
+
+            {subProducts.length === 0 && !showNewSub && (
+              <div className="px-4 py-4 text-center">
+                <Folder className="w-6 h-6 mx-auto mb-1.5" style={{ color: '#D1D5DB' }} />
+                <p className="text-[11px]" style={{ color: '#ADB5B7' }}>Crea subproductos para organizar las fotos</p>
+              </div>
+            )}
+          </div>
+
+          {/* Active sub filter indicator */}
+          {subFilter && (
+            <div className="flex items-center justify-between px-4 py-2 border-t" style={{ borderColor: '#EDF0F4', background: '#F0FDFA' }}>
+              <span className="text-[11px] font-semibold" style={{ color: '#115E59' }}>
+                Filtrando: {subProducts.find(s => s.id === subFilter)?.name}
+              </span>
+              <button onClick={() => setSubFilter(null)} className="text-[11px] font-semibold" style={{ color: '#5D7380' }}>
+                <X className="w-3.5 h-3.5 inline" /> Quitar filtro
+              </button>
+            </div>
           )}
         </div>
 

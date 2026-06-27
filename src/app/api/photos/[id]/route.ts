@@ -109,6 +109,10 @@ export async function PUT(
       data.sortOrder = body.sortOrder;
     }
 
+    if (body.subProductId !== undefined) {
+      data.subProductId = body.subProductId === null ? null : body.subProductId;
+    }
+
     const photo = await db.photo.update({
       where: { id },
       data,

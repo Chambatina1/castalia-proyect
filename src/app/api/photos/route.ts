@@ -33,10 +33,12 @@ export async function GET(request: NextRequest) {
     const uploadedBy = searchParams.get('uploadedBy');
     const isApproved = searchParams.get('isApproved');
 
+    const subProductId = searchParams.get('subProductId');
     const where: Record<string, unknown> = {};
 
     if (projectId) where.projectId = projectId;
     if (tag) where.tags = { contains: tag };
+    if (subProductId) where.subProductId = subProductId;
     if (uploadedBy) where.uploadedBy = uploadedBy;
     if (isApproved !== null && isApproved !== undefined && isApproved !== '') {
       where.isApproved = isApproved === 'true';
@@ -111,6 +113,7 @@ export async function POST(request: NextRequest) {
         const bytes = await file.arrayBuffer();
         await writeFile(filepath, Buffer.from(bytes));
 
+        const subProductId = (formData.get('subProductId') as string) || null;
         const url = `/api/photos/serve/${filename}`;
         savedUrls.push(url);
 
@@ -136,6 +139,7 @@ export async function POST(request: NextRequest) {
             tags: JSON.stringify(tagArr),
             caption: photoCaption,
             isUrgent: isUrgent === 'true',
+            ...(subProductId && { subProductId }),
           },
           include: {
             uploader: { select: { id: true, name: true, avatar: true } },
