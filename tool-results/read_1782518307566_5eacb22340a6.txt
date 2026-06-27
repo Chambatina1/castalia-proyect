@@ -1,0 +1,740 @@
+     1→'use client';
+     2→
+     3→import React, {
+     4→  useState,
+     5→  useEffect,
+     6→  useCallback,
+     7→  useRef,
+     8→} from 'react';
+     9→import { motion, AnimatePresence } from 'framer-motion';
+    10→import {
+    11→  X,
+    12→  ChevronLeft,
+    13→  ChevronRight,
+    14→  MapPin,
+    15→  Calendar,
+    16→  User,
+    17→  Tag,
+    18→  Info,
+    19→  Minus,
+    20→  MoveRight,
+    21→  Circle,
+    22→  Type,
+    23→  Pencil,
+    24→  MessageSquare,
+    25→  Check,
+    26→  XCircle,
+    27→  Eye,
+    28→  Trash2,
+    29→  RotateCcw,
+    30→} from 'lucide-react';
+    31→import { useAppStore, type Photo, type Annotation } from '@/store/app-store';
+    32→import { Button } from '@/components/ui/button';
+    33→import { Badge } from '@/components/ui/badge';
+    34→import { Input } from '@/components/ui/input';
+    35→import { Textarea } from '@/components/ui/textarea';
+    36→import { ScrollArea } from '@/components/ui/scroll-area';
+    37→import { Separator } from '@/components/ui/separator';
+    38→import { Switch } from '@/components/ui/switch';
+    39→import {
+    40→  Tooltip,
+    41→  TooltipContent,
+    42→  TooltipTrigger,
+    43→} from '@/components/ui/tooltip';
+    44→import { cn } from '@/lib/utils';
+    45→import { useToast } from '@/hooks/use-toast';
+    46→
+    47→type AnnotationTool = 'arrow' | 'circle' | 'text' | 'freedraw' | 'comment' | null;
+    48→
+    49→const ANNOTATION_COLORS = [
+    50→  '#ef4444',
+    51→  '#f97316',
+    52→  '#eab308',
+    53→  '#22c55e',
+    54→  '#06b6d4',
+    55→  '#8b5cf6',
+    56→  '#ec4899',
+    57→  '#ffffff',
+    58→];
+    59→
+    60→interface PhotoComment {
+    61→  id: string;
+    62→  authorName: string;
+    63→  authorAvatar?: string;
+    64→  content: string;
+    65→  createdAt: string;
+    66→}
+    67→
+    68→interface PhotoLightboxProps {
+    69→  photos: Photo[];
+    70→}
+    71→
+    72→export default function PhotoLightbox({ photos }: PhotoLightboxProps) {
+    73→  const {
+    74→    lightboxOpen,
+    75→    lightboxPhotoId,
+    76→    closeLightbox,
+    77→    lightboxAnnotations,
+    78→    setAnnotation,
+    79→    currentUser,
+    80→  } = useAppStore();
+    81→  const { toast } = useToast();
+    82→
+    83→  const [currentIndex, setCurrentIndex] = useState(0);
+    84→  const [infoOpen, setInfoOpen] = useState(false);
+    85→  const [activeTool, setActiveTool] = useState<AnnotationTool>(null);
+    86→  const [annotationColor, setAnnotationColor] = useState('#ef4444');
+    87→  const [textAnnotation, setTextAnnotation] = useState('');
+    88→  const [showTextInput, setShowTextInput] = useState(false);
+    89→  const [textPosition, setTextPosition] = useState({ x: 0, y: 0 });
+    90→  const [isDrawing, setIsDrawing] = useState(false);
+    91→  const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null);
+    92→  const [currentPoints, setCurrentPoints] = useState<{ x: number; y: number }[]>([]);
+    93→  const [comments, setComments] = useState<PhotoComment[]>([]);
+    94→  const [newComment, setNewComment] = useState('');
+    95→
+    96→  const canvasRef = useRef<HTMLCanvasElement>(null);
+    97→  const imageRef = useRef<HTMLImageElement>(null);
+    98→  const containerRef = useRef<HTMLDivElement>(null);
+    99→
+   100→  const currentPhoto = photos[currentIndex];
+   101→  const isManager = currentUser?.role === 'manager';
+   102→
+   103→  const navigateNext = () => {
+   104→    setCurrentIndex((prev) => (prev + 1) % photos.length);
+   105→  };
+   106→
+   107→  const navigatePrev = () => {
+   108→    setCurrentIndex((prev) => (prev - 1 + photos.length) % photos.length);
+   109→  };
+   110→
+   111→  // Sync index when photoId changes
+   112→  useEffect(() => {
+   113→    if (lightboxPhotoId) {
+   114→      const idx = photos.findIndex((p) => p.id === lightboxPhotoId);
+   115→      if (idx >= 0) setCurrentIndex(idx);
+   116→    }
+   117→  }, [lightboxPhotoId, photos]);
+   118→
+   119→  // Reset state when photo changes
+   120→  useEffect(() => {
+   121→    setActiveTool(null);
+   122→    setShowTextInput(false);
+   123→    setIsDrawing(false);
+   124→    setCurrentPoints([]);
+   125→    setDrawStart(null);
+   126→    setNewComment('');
+   127→  }, [currentIndex]);
+   128→
+   129→  // Keyboard navigation
+   130→  useEffect(() => {
+   131→    if (!lightboxOpen) return;
+   132→    const handleKey = (e: KeyboardEvent) => {
+   133→      switch (e.key) {
+   134→        case 'ArrowLeft':
+   135→          e.preventDefault();
+   136→          navigatePrev();
+   137→          break;
+   138→        case 'ArrowRight':
+   139→          e.preventDefault();
+   140→          navigateNext();
+   141→          break;
+   142→        case 'Escape':
+   143→          e.preventDefault();
+   144→          closeLightbox();
+   145→          break;
+   146→      }
+   147→    };
+   148→    window.addEventListener('keydown', handleKey);
+   149→    return () => window.removeEventListener('keydown', handleKey);
+   150→  }, [lightboxOpen, currentIndex, photos.length]);
+   151→
+   152→  const drawAnnotation = (ctx: CanvasRenderingContext2D, ann: Annotation) => {
+   153→    ctx.strokeStyle = ann.color;
+   154→    ctx.fillStyle = ann.color;
+   155→    ctx.lineWidth = 2;
+   156→
+   157→    if (ann.type === 'arrow' && ann.points.length >= 2) {
+   158→      drawArrow(ctx, ann.points[0], ann.points[1], ann.color);
+   159→    } else if (ann.type === 'circle' && ann.points.length >= 2) {
+   160→      const radius = Math.sqrt(
+   161→        Math.pow(ann.points[1].x - ann.points[0].x, 2) +
+   162→          Math.pow(ann.points[1].y - ann.points[0].y, 2)
+   163→      );
+   164→      ctx.beginPath();
+   165→      ctx.arc(ann.points[0].x, ann.points[0].y, radius, 0, Math.PI * 2);
+   166→      ctx.stroke();
+   167→    } else if (ann.type === 'text' && ann.text && ann.points[0]) {
+   168→      const fontSize = 16;
+   169→      ctx.font = `bold ${fontSize}px sans-serif`;
+   170→      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+   171→      ctx.fillRect(ann.points[0].x - 2, ann.points[0].y - fontSize, ctx.measureText(ann.text).width + 8, fontSize + 6);
+   172→      ctx.fillStyle = ann.color;
+   173→      ctx.fillText(ann.text, ann.points[0].x + 2, ann.points[0].y);
+   174→    } else if (ann.type === 'freedraw' && ann.points.length > 1) {
+   175→      ctx.beginPath();
+   176→      ctx.moveTo(ann.points[0].x, ann.points[0].y);
+   177→      for (let i = 1; i < ann.points.length; i++) {
+   178→        ctx.lineTo(ann.points[i].x, ann.points[i].y);
+   179→      }
+   180→      ctx.lineCap = 'round';
+   181→      ctx.lineJoin = 'round';
+   182→      ctx.lineWidth = 3;
+   183→      ctx.stroke();
+   184→    }
+   185→  };
+   186→
+   187→  const drawArrow = (
+   188→    ctx: CanvasRenderingContext2D,
+   189→    from: { x: number; y: number },
+   190→    to: { x: number; y: number },
+   191→    color: string
+   192→  ) => {
+   193→    const headLen = 12;
+   194→    const angle = Math.atan2(to.y - from.y, to.x - from.x);
+   195→
+   196→    ctx.beginPath();
+   197→    ctx.moveTo(from.x, from.y);
+   198→    ctx.lineTo(to.x, to.y);
+   199→    ctx.strokeStyle = color;
+   200→    ctx.lineWidth = 2;
+   201→    ctx.stroke();
+   202→
+   203→    ctx.beginPath();
+   204→    ctx.moveTo(to.x, to.y);
+   205→    ctx.lineTo(to.x - headLen * Math.cos(angle - Math.PI / 6), to.y - headLen * Math.sin(angle - Math.PI / 6));
+   206→    ctx.lineTo(to.x - headLen * Math.cos(angle + Math.PI / 6), to.y - headLen * Math.sin(angle + Math.PI / 6));
+   207→    ctx.closePath();
+   208→    ctx.fillStyle = color;
+   209→    ctx.fill();
+   210→  };
+   211→
+   212→  const getCanvasCoords = useCallback(
+   213→    (e: React.MouseEvent | React.TouchEvent) => {
+   214→      const canvas = canvasRef.current;
+   215→      if (!canvas) return { x: 0, y: 0 };
+   216→      const rect = canvas.getBoundingClientRect();
+   217→      const clientX = 'touches' in e ? e.touches[0]?.clientX ?? 0 : e.clientX;
+   218→      const clientY = 'touches' in e ? e.touches[0]?.clientY ?? 0 : e.clientY;
+   219→      return {
+   220→        x: clientX - rect.left,
+   221→        y: clientY - rect.top,
+   222→      };
+   223→    },
+   224→    []
+   225→  );
+   226→
+   227→  const handleCanvasMouseDown = (e: React.MouseEvent) => {
+   228→    if (!activeTool || activeTool === 'comment') return;
+   229→    const pos = getCanvasCoords(e);
+   230→
+   231→    if (activeTool === 'text') {
+   232→      setTextPosition(pos);
+   233→      setShowTextInput(true);
+   234→      return;
+   235→    }
+   236→
+   237→    setIsDrawing(true);
+   238→    setDrawStart(pos);
+   239→    setCurrentPoints([pos]);
+   240→  };
+   241→
+   242→  const handleCanvasMouseMove = (e: React.MouseEvent) => {
+   243→    if (!isDrawing) return;
+   244→    const pos = getCanvasCoords(e);
+   245→    setCurrentPoints((prev) => [...prev, pos]);
+   246→  };
+   247→
+   248→  const handleCanvasMouseUp = () => {
+   249→    if (!isDrawing || !drawStart || !currentPhoto) {
+   250→      setIsDrawing(false);
+   251→      return;
+   252→    }
+   253→
+   254→    const lastPoint = currentPoints[currentPoints.length - 1] || drawStart;
+   255→    const newAnnotation: Annotation = {
+   256→      type: activeTool as Annotation['type'],
+   257→      color: annotationColor,
+   258→      points: activeTool === 'freedraw' ? currentPoints : [drawStart, lastPoint],
+   259→      text: undefined,
+   260→    };
+   261→
+   262→    const existing = lightboxAnnotations.get(currentPhoto.id) || [];
+   263→    setAnnotation(currentPhoto.id, [...existing, newAnnotation]);
+   264→
+   265→    setIsDrawing(false);
+   266→    setDrawStart(null);
+   267→    setCurrentPoints([]);
+   268→  };
+   269→
+   270→  const handleTextSubmit = () => {
+   271→    if (!textAnnotation.trim() || !currentPhoto) return;
+   272→    const newAnnotation: Annotation = {
+   273→      type: 'text',
+   274→      color: annotationColor,
+   275→      points: [textPosition],
+   276→      text: textAnnotation.trim(),
+   277→    };
+   278→    const existing = lightboxAnnotations.get(currentPhoto.id) || [];
+   279→    setAnnotation(currentPhoto.id, [...existing, newAnnotation]);
+   280→    setTextAnnotation('');
+   281→    setShowTextInput(false);
+   282→  };
+   283→
+   284→  const clearAnnotations = () => {
+   285→    if (currentPhoto) setAnnotation(currentPhoto.id, []);
+   286→  };
+   287→
+   288→  // Redraw canvas
+   289→  useEffect(() => {
+   290→    const canvas = canvasRef.current;
+   291→    const img = imageRef.current;
+   292→    if (!canvas || !img) return;
+   293→
+   294→    const ctx = canvas.getContext('2d');
+   295→    if (!ctx) return;
+   296→
+   297→    // Match canvas to displayed image size
+   298→    const rect = img.getBoundingClientRect();
+   299→    canvas.width = rect.width;
+   300→    canvas.height = rect.height;
+   301→    canvas.style.width = `${rect.width}px`;
+   302→    canvas.style.height = `${rect.height}px`;
+   303→
+   304→    ctx.clearRect(0, 0, canvas.width, canvas.height);
+   305→
+   306→    // Draw saved annotations for this photo
+   307→    const savedAnnotations = lightboxAnnotations.get(currentPhoto?.id || '') || [];
+   308→    savedAnnotations.forEach((ann) => drawAnnotation(ctx, ann));
+   309→
+   310→    // Draw current in-progress annotation
+   311→    if (isDrawing && drawStart && activeTool === 'arrow' && currentPoints.length >= 2) {
+   312→      drawArrow(ctx, drawStart, currentPoints[currentPoints.length - 1], annotationColor);
+   313→    }
+   314→    if (isDrawing && drawStart && activeTool === 'circle' && currentPoints.length >= 2) {
+   315→      const last = currentPoints[currentPoints.length - 1];
+   316→      const radius = Math.sqrt(
+   317→        Math.pow(last.x - drawStart.x, 2) + Math.pow(last.y - drawStart.y, 2)
+   318→      );
+   319→      ctx.beginPath();
+   320→      ctx.arc(drawStart.x, drawStart.y, radius, 0, Math.PI * 2);
+   321→      ctx.strokeStyle = annotationColor;
+   322→      ctx.lineWidth = 2;
+   323→      ctx.stroke();
+   324→    }
+   325→    if (isDrawing && activeTool === 'freedraw' && currentPoints.length > 1) {
+   326→      ctx.beginPath();
+   327→      ctx.moveTo(currentPoints[0].x, currentPoints[0].y);
+   328→      for (let i = 1; i < currentPoints.length; i++) {
+   329→        ctx.lineTo(currentPoints[i].x, currentPoints[i].y);
+   330→      }
+   331→      ctx.strokeStyle = annotationColor;
+   332→      ctx.lineWidth = 3;
+   333→      ctx.lineCap = 'round';
+   334→      ctx.lineJoin = 'round';
+   335→      ctx.stroke();
+   336→    }
+   337→  }, [currentPhoto, isDrawing, drawStart, currentPoints, activeTool, annotationColor, lightboxAnnotations, currentIndex]);
+   338→
+   339→  const handleAddComment = () => {
+   340→    if (!newComment.trim()) return;
+   341→    setComments((prev) => [
+   342→      ...prev,
+   343→      {
+   344→        id: Date.now().toString(),
+   345→        authorName: currentUser?.name || 'You',
+   346→        authorAvatar: currentUser?.avatar,
+   347→        content: newComment.trim(),
+   348→        createdAt: new Date().toISOString(),
+   349→      },
+   350→    ]);
+   351→    setNewComment('');
+   352→  };
+   353→
+   354→  if (!currentPhoto) return null;
+   355→
+   356→  const tools: { id: AnnotationTool; icon: React.ReactNode; label: string }[] = [
+   357→    { id: 'arrow', icon: <MoveRight className="size-4" />, label: 'Arrow' },
+   358→    { id: 'circle', icon: <Circle className="size-4" />, label: 'Circle' },
+   359→    { id: 'text', icon: <Type className="size-4" />, label: 'Text' },
+   360→    { id: 'freedraw', icon: <Pencil className="size-4" />, label: 'Free Draw' },
+   361→    { id: 'comment', icon: <MessageSquare className="size-4" />, label: 'Comment' },
+   362→  ];
+   363→
+   364→  return (
+   365→    <AnimatePresence>
+   366→      {lightboxOpen && (
+   367→        <motion.div
+   368→          initial={{ opacity: 0 }}
+   369→          animate={{ opacity: 1 }}
+   370→          exit={{ opacity: 0 }}
+   371→          className="fixed inset-0 z-[100] bg-black/95 flex"
+   372→        >
+   373→          {/* Close Button */}
+   374→          <button
+   375→            onClick={closeLightbox}
+   376→            className="absolute top-4 right-4 z-50 rounded-full bg-black/50 p-2 text-white hover:bg-black/70 transition-colors"
+   377→          >
+   378→            <X className="size-5" />
+   379→          </button>
+   380→
+   381→          {/* Navigation Arrows */}
+   382→          {photos.length > 1 && (
+   383→            <>
+   384→              <button
+   385→                onClick={navigatePrev}
+   386→                className="absolute left-4 top-1/2 -translate-y-1/2 z-50 rounded-full bg-black/50 p-2 text-white hover:bg-black/70 transition-colors"
+   387→              >
+   388→                <ChevronLeft className="size-6" />
+   389→              </button>
+   390→              <button
+   391→                onClick={navigateNext}
+   392→                className="absolute right-4 top-1/2 -translate-y-1/2 z-50 rounded-full bg-black/50 p-2 text-white hover:bg-black/70 transition-colors"
+   393→              >
+   394→                <ChevronRight className="size-6" />
+   395→              </button>
+   396→            </>
+   397→          )}
+   398→
+   399→          {/* Main Image Area */}
+   400→          <div className="flex-1 flex items-center justify-center relative" ref={containerRef}>
+   401→            <div className="relative max-w-full max-h-full p-4">
+   402→              <img
+   403→                ref={imageRef}
+   404→                src={currentPhoto.url}
+   405→                alt={currentPhoto.caption || 'Project photo'}
+   406→                className="max-w-full max-h-[calc(100vh-180px)] object-contain rounded-lg"
+   407→                draggable={false}
+   408→              />
+   409→              <canvas
+   410→                ref={canvasRef}
+   411→                className={cn(
+   412→                  'absolute top-0 left-0 pointer-events-none',
+   413→                  activeTool && activeTool !== 'comment' && 'pointer-events-auto cursor-crosshair'
+   414→                )}
+   415→                style={{ width: '100%', height: '100%' }}
+   416→                onMouseDown={handleCanvasMouseDown}
+   417→                onMouseMove={handleCanvasMouseMove}
+   418→                onMouseUp={handleCanvasMouseUp}
+   419→                onMouseLeave={() => {
+   420→                  if (isDrawing) handleCanvasMouseUp();
+   421→                }}
+   422→              />
+   423→
+   424→              {/* Text Input Overlay */}
+   425→              {showTextInput && (
+   426→                <motion.div
+   427→                  initial={{ opacity: 0, scale: 0.9 }}
+   428→                  animate={{ opacity: 1, scale: 1 }}
+   429→                  className="absolute bg-background border rounded-lg shadow-lg p-3 z-50 flex gap-2"
+   430→                  style={{
+   431→                    left: textPosition.x,
+   432→                    top: textPosition.y,
+   433→                  }}
+   434→                >
+   435→                  <Input
+   436→                    value={textAnnotation}
+   437→                    onChange={(e) => setTextAnnotation(e.target.value)}
+   438→                    placeholder="Type annotation..."
+   439→                    className="w-48 h-8 text-sm"
+   440→                    onKeyDown={(e) => e.key === 'Enter' && handleTextSubmit()}
+   441→                    autoFocus
+   442→                  />
+   443→                  <Button size="icon" className="size-8" onClick={handleTextSubmit}>
+   444→                    <Check className="size-4" />
+   445→                  </Button>
+   446→                  <Button
+   447→                    size="icon"
+   448→                    variant="outline"
+   449→                    className="size-8"
+   450→                    onClick={() => setShowTextInput(false)}
+   451→                  >
+   452→                    <X className="size-4" />
+   453→                  </Button>
+   454→                </motion.div>
+   455→              )}
+   456→            </div>
+   457→
+   458→            {/* Photo Counter */}
+   459→            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white text-sm px-3 py-1 rounded-full">
+   460→              {currentIndex + 1} / {photos.length}
+   461→            </div>
+   462→          </div>
+   463→
+   464→          {/* Right Side Panel */}
+   465→          <motion.div
+   466→            initial={{ x: 400 }}
+   467→            animate={{ x: infoOpen ? 0 : 400 }}
+   468→            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+   469→            className="w-[380px] bg-background border-l flex flex-col h-full shrink-0 absolute right-0 top-0 bottom-0 z-40"
+   470→          >
+   471→            {/* Panel Header */}
+   472→            <div className="flex items-center justify-between p-4 border-b">
+   473→              <h3 className="font-semibold text-sm">Photo Details</h3>
+   474→              <Button
+   475→                variant="ghost"
+   476→                size="icon"
+   477→                className="size-8"
+   478→                onClick={() => setInfoOpen(false)}
+   479→              >
+   480→                <Minus className="size-4" />
+   481→              </Button>
+   482→            </div>
+   483→
+   484→            <ScrollArea className="flex-1">
+   485→              <div className="p-4 space-y-4">
+   486→                {/* Caption */}
+   487→                {currentPhoto.caption && (
+   488→                  <p className="text-sm">{currentPhoto.caption}</p>
+   489→                )}
+   490→
+   491→                {/* Tags */}
+   492→                <div className="flex flex-wrap gap-1.5">
+   493→                  {currentPhoto.tags.map((tag) => (
+   494→                    <Badge key={tag} variant="secondary" className="capitalize text-xs">
+   495→                      <Tag className="size-3 mr-1" />
+   496→                      {tag}
+   497→                    </Badge>
+   498→                  ))}
+   499→                </div>
+   500→
+   501→                {/* Metadata */}
+   502→                <div className="space-y-2.5 text-sm">
+   503→                  <div className="flex items-center gap-2 text-muted-foreground">
+   504→                    <User className="size-4 shrink-0" />
+   505→                    <span>{currentPhoto.uploaderName}</span>
+   506→                  </div>
+   507→                  <div className="flex items-center gap-2 text-muted-foreground">
+   508→                    <Calendar className="size-4 shrink-0" />
+   509→                    <span>{new Date(currentPhoto.createdAt).toLocaleDateString()}</span>
+   510→                  </div>
+   511→                  {currentPhoto.locationAddress && (
+   512→                    <div className="flex items-center gap-2 text-muted-foreground">
+   513→                      <MapPin className="size-4 shrink-0" />
+   514→                      <span>{currentPhoto.locationAddress}</span>
+   515→                    </div>
+   516→                  )}
+   517→                </div>
+   518→
+   519→                {currentPhoto.isUrgent && (
+   520→                  <Badge variant="destructive" className="gap-1">
+   521→                    <AlertTriangle className="size-3" />
+   522→                    Urgent Problem
+   523→                  </Badge>
+   524→                )}
+   525→
+   526→                <Separator />
+   527→
+   528→                {/* Manager Actions */}
+   529→                {isManager && (
+   530→                  <div className="space-y-3">
+   531→                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+   532→                      Manager Actions
+   533→                    </p>
+   534→                    <div className="flex gap-2">
+   535→                      <Button size="sm" variant="outline" className="flex-1 gap-1.5">
+   536→                        <Check className="size-3.5" />
+   537→                        Approve
+   538→                      </Button>
+   539→                      <Button size="sm" variant="outline" className="flex-1 gap-1.5 text-destructive hover:text-destructive">
+   540→                        <XCircle className="size-3.5" />
+   541→                        Reject
+   542→                      </Button>
+   543→                    </div>
+   544→                    <div className="flex items-center justify-between">
+   545→                      <Label className="text-sm flex items-center gap-1.5">
+   546→                        <Eye className="size-3.5" />
+   547→                        Mark for Client
+   548→                      </Label>
+   549→                      <Switch
+   550→                        checked={currentPhoto.visibleToClient}
+   551→                        onCheckedChange={() => {
+   552→                          toast({
+   553→                            title: 'Visibility updated',
+   554→                            description: currentPhoto.visibleToClient
+   555→                              ? 'Photo hidden from client'
+   556→                              : 'Photo marked for client',
+   557→                          });
+   558→                        }}
+   559→                      />
+   560→                    </div>
+   561→                  </div>
+   562→                )}
+   563→
+   564→                <Separator />
+   565→
+   566→                {/* Comments Section */}
+   567→                <div>
+   568→                  <h4 className="text-sm font-medium mb-3 flex items-center gap-1.5">
+   569→                    <MessageSquare className="size-4" />
+   570→                    Comments ({comments.length})
+   571→                  </h4>
+   572→                  <div className="space-y-3 max-h-60 overflow-y-auto">
+   573→                    {comments.length === 0 && (
+   574→                      <p className="text-xs text-muted-foreground text-center py-4">
+   575→                        No comments yet
+   576→                      </p>
+   577→                    )}
+   578→                    {comments.map((c) => (
+   579→                      <div key={c.id} className="flex gap-2">
+   580→                        <div className="size-7 rounded-full bg-muted shrink-0 flex items-center justify-center text-xs font-medium">
+   581→                          {c.authorName.charAt(0).toUpperCase()}
+   582→                        </div>
+   583→                        <div className="flex-1 min-w-0">
+   584→                          <div className="flex items-baseline gap-2">
+   585→                            <span className="text-xs font-medium">{c.authorName}</span>
+   586→                            <span className="text-[10px] text-muted-foreground">
+   587→                              {new Date(c.createdAt).toLocaleTimeString()}
+   588→                            </span>
+   589→                          </div>
+   590→                          <p className="text-sm mt-0.5">{c.content}</p>
+   591→                        </div>
+   592→                      </div>
+   593→                    ))}
+   594→                  </div>
+   595→                  <div className="flex gap-2 mt-3">
+   596→                    <Input
+   597→                      value={newComment}
+   598→                      onChange={(e) => setNewComment(e.target.value)}
+   599→                      placeholder="Add a comment..."
+   600→                      className="h-8 text-sm"
+   601→                      onKeyDown={(e) => e.key === 'Enter' && handleAddComment()}
+   602→                    />
+   603→                    <Button size="icon" className="size-8 shrink-0" onClick={handleAddComment}>
+   604→                      <Send className="size-3.5" />
+   605→                    </Button>
+   606→                  </div>
+   607→                </div>
+   608→              </div>
+   609→            </ScrollArea>
+   610→          </motion.div>
+   611→
+   612→          {/* Annotation Toolbar */}
+   613→          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-xl px-2 py-1.5">
+   614→            {/* Toggle info panel */}
+   615→            <Tooltip>
+   616→              <TooltipTrigger asChild>
+   617→                <Button
+   618→                  variant="ghost"
+   619→                  size="icon"
+   620→                  className={cn('size-9 text-white hover:bg-white/20', infoOpen && 'bg-white/20')}
+   621→                  onClick={() => setInfoOpen(!infoOpen)}
+   622→                >
+   623→                  <Info className="size-4" />
+   624→                </Button>
+   625→              </TooltipTrigger>
+   626→              <TooltipContent>Photo Info</TooltipContent>
+   627→            </Tooltip>
+   628→
+   629→            <div className="w-px h-6 bg-white/20 mx-1" />
+   630→
+   631→            {/* Annotation tools */}
+   632→            {tools.map((tool) => (
+   633→              <Tooltip key={tool.id}>
+   634→                <TooltipTrigger asChild>
+   635→                  <Button
+   636→                    variant="ghost"
+   637→                    size="icon"
+   638→                    className={cn(
+   639→                      'size-9 text-white hover:bg-white/20',
+   640→                      activeTool === tool.id && 'bg-white/30 ring-1 ring-white/40'
+   641→                    )}
+   642→                    onClick={() =>
+   643→                      setActiveTool(activeTool === tool.id ? null : tool.id)
+   644→                    }
+   645→                  >
+   646→                    {tool.icon}
+   647→                  </Button>
+   648→                </TooltipTrigger>
+   649→                <TooltipContent>{tool.label}</TooltipContent>
+   650→              </Tooltip>
+   651→            ))}
+   652→
+   653→            <div className="w-px h-6 bg-white/20 mx-1" />
+   654→
+   655→            {/* Color picker */}
+   656→            <div className="flex items-center gap-1 px-1">
+   657→              {ANNOTATION_COLORS.map((color) => (
+   658→                <button
+   659→                  key={color}
+   660→                  className={cn(
+   661→                    'w-5 h-5 rounded-full border-2 transition-transform',
+   662→                    annotationColor === color ? 'scale-125 border-white' : 'border-transparent'
+   663→                  )}
+   664→                  style={{ backgroundColor: color }}
+   665→                  onClick={() => setAnnotationColor(color)}
+   666→                />
+   667→              ))}
+   668→            </div>
+   669→
+   670→            <div className="w-px h-6 bg-white/20 mx-1" />
+   671→
+   672→            {/* Clear */}
+   673→            <Tooltip>
+   674→              <TooltipTrigger asChild>
+   675→                <Button
+   676→                  variant="ghost"
+   677→                  size="icon"
+   678→                  className="size-9 text-white hover:bg-white/20"
+   679→                  onClick={clearAnnotations}
+   680→                >
+   681→                  <RotateCcw className="size-4" />
+   682→                </Button>
+   683→              </TooltipTrigger>
+   684→              <TooltipContent>Clear Annotations</TooltipContent>
+   685→            </Tooltip>
+   686→          </div>
+   687→
+   688→          {/* Comment mode indicator */}
+   689→          {activeTool === 'comment' && (
+   690→            <motion.div
+   691→              initial={{ opacity: 0, y: 20 }}
+   692→              animate={{ opacity: 1, y: 0 }}
+   693→              className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-background border rounded-lg px-4 py-2 shadow-lg text-sm"
+   694→            >
+   695→              Comment mode active — use the panel on the right to add comments
+   696→              <Button
+   697→                variant="ghost"
+   698→                size="icon"
+   699→                className="size-6 ml-2"
+   700→                onClick={() => setInfoOpen(true)}
+   701→              >
+   702→                <ChevronRight className="size-3" />
+   703→              </Button>
+   704→            </motion.div>
+   705→          )}
+   706→        </motion.div>
+   707→      )}
+   708→    </AnimatePresence>
+   709→  );
+   710→}
+   711→
+   712→function Label({
+   713→  className,
+   714→  children,
+   715→  ...props
+   716→}: React.ComponentProps<'label'>) {
+   717→  return (
+   718→    <label className={className} {...props}>
+   719→      {children}
+   720→    </label>
+   721→  );
+   722→}
+   723→
+   724→function Send({ className }: { className?: string }) {
+   725→  return (
+   726→    <svg
+   727→      xmlns="http://www.w3.org/2000/svg"
+   728→      viewBox="0 0 24 24"
+   729→      fill="none"
+   730→      stroke="currentColor"
+   731→      strokeWidth="2"
+   732→      strokeLinecap="round"
+   733→      strokeLinejoin="round"
+   734→      className={className}
+   735→    >
+   736→      <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" />
+   737→      <path d="m21.854 2.147-10.94 10.939" />
+   738→    </svg>
+   739→  );
+   740→}

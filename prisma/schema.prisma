@@ -1,0 +1,262 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ENUMS (as String constants in SQLite) ====================
+
+// Roles: SUPER_ADMIN, MANAGER, EMPLOYEE, CLIENT
+// Project Status: ACTIVE, PAUSED, COMPLETED, ARCHIVED
+// Task Status: PENDING, IN_PROGRESS, COMPLETED, NEEDS_REVIEW
+// Photo Tags: before, during, after, problem, warranty, evidence, material, inspection, client
+// Priority: LOW, MEDIUM, HIGH, URGENT
+
+// ==================== MODELS ====================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String
+  role          String    @default("EMPLOYEE") // SUPER_ADMIN, MANAGER, EMPLOYEE, CLIENT
+  avatar        String?
+  phone         String?
+  position      String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  assignedTasks    Task[]          @relation("TaskAssignee")
+  createdTasks     Task[]          @relation("TaskCreator")
+  photos           Photo[]
+  chatMessages     ChatMessage[]
+  activityLogs     ActivityLog[]
+  createdProjects  Project[]       @relation("ProjectCreator")
+  projectMembers   ProjectMember[]
+  reports          Report[]
+  notifications    Notification[]
+  internalNotes    InternalNote[]
+  clientShares     ClientShare[]
+
+  @@index([role])
+  @@index([email])
+}
+
+model Project {
+  id              String    @id @default(cuid())
+  name            String
+  clientName      String
+  clientEmail     String?
+  address         String
+  city            String?
+  state           String?
+  zipCode         String?
+  latitude        Float?
+  longitude       Float?
+  description     String?
+  status          String    @default("ACTIVE") // ACTIVE, PAUSED, COMPLETED, ARCHIVED
+  priority        String    @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  startDate       DateTime?
+  estimatedEnd    DateTime?
+  completedAt     DateTime?
+  progress        Int       @default(0) // 0-100
+  coverImage      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  creatorId       String
+  creator         User      @relation("ProjectCreator", fields: [creatorId], references: [id])
+  members         ProjectMember[]
+  photos          Photo[]
+  tasks           Task[]
+  chatMessages    ChatMessage[]
+  reports         Report[]
+  activityLogs    ActivityLog[]
+  internalNotes   InternalNote[]
+  clientShares    ClientShare[]
+
+  @@index([status])
+  @@index([priority])
+  @@index([creatorId])
+}
+
+model ProjectMember {
+  id            String    @id @default(cuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role          String    @default("MEMBER") // MANAGER, MEMBER, VIEWER
+  joinedAt      DateTime  @default(now())
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+}
+
+model Photo {
+  id            String    @id @default(cuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy    String
+  uploader      User      @relation(fields: [uploadedBy], references: [id])
+  url           String
+  thumbnailUrl  String?
+  fileType      String    @default("image") // image, video
+  fileName      String?
+  fileSize      Int?
+  width         Int?
+  height        Int?
+  latitude      Float?
+  longitude     Float?
+  address       String?
+  tags          String    @default("") // comma-separated: before,during,after,problem,...
+  caption       String?
+  annotations   String?   // JSON string for annotations data
+  isApproved    Boolean   @default(false)
+  isVisibleToClient Boolean @default(false)
+  isUrgent      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  @@index([projectId])
+  @@index([uploadedBy])
+  @@index([isApproved])
+  @@index([isVisibleToClient])
+}
+
+model Task {
+  id            String    @id @default(cuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title         String
+  description   String?
+  status        String    @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, NEEDS_REVIEW
+  priority      String    @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  dueDate       DateTime?
+  completedAt   DateTime?
+  checklist     String?   // JSON string for checklist items
+  creatorId     String
+  creator       User      @relation("TaskCreator", fields: [creatorId], references: [id])
+  assigneeId    String?
+  assignee      User?     @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([projectId])
+  @@index([status])
+  @@index([assigneeId])
+  @@index([creatorId])
+}
+
+model ChatMessage {
+  id            String    @id @default(cuid())
+  projectId     String?
+  project       Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  senderId      String
+  sender        User      @relation(fields: [senderId], references: [id])
+  content       String
+  messageType   String    @default("TEXT") // TEXT, IMAGE, FILE
+  fileUrl       String?
+  mentions      String?   // JSON string of mentioned user IDs
+  isInternal    Boolean   @default(false) // true = only managers can see
+  createdAt     DateTime  @default(now())
+
+  @@index([projectId])
+  @@index([senderId])
+}
+
+model Report {
+  id            String    @id @default(cuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title         String
+  type          String    @default("PROGRESS") // PROGRESS, INSPECTION, BEFORE_AFTER, INTERNAL, CLIENT
+  content       String?   // JSON string with report sections
+  photos        String?   // JSON string of photo IDs included
+  status        String    @default("DRAFT") // DRAFT, FINAL, SENT
+  generatedBy   String
+  generator     User      @relation(fields: [generatedBy], references: [id])
+  sentToEmail   String?
+  shareLink     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([projectId])
+  @@index([type])
+  @@index([generatedBy])
+}
+
+model ActivityLog {
+  id            String    @id @default(cuid())
+  projectId     String?
+  project       Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  action        String    // CREATED, UPDATED, DELETED, UPLOADED, COMMENTED, STATUS_CHANGED, etc.
+  entityType    String?   // PROJECT, PHOTO, TASK, REPORT, etc.
+  entityId      String?
+  details       String?
+  createdAt     DateTime  @default(now())
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model InternalNote {
+  id            String    @id @default(cuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  authorId      String
+  author        User      @relation(fields: [authorId], references: [id])
+  content       String
+  isPinned      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([projectId])
+  @@index([authorId])
+}
+
+model ClientShare {
+  id            String    @id @default(cuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy     String
+  creator       User      @relation(fields: [createdBy], references: [id])
+  clientEmail   String?
+  clientName    String?
+  token         String    @unique
+  password      String?
+  expiresAt     DateTime?
+  allowedPhotos String?   // JSON: list of photo IDs the client can see
+  allowedReports String?  // JSON: list of report IDs the client can see
+  isActive      Boolean   @default(true)
+  lastAccessed  DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([projectId])
+  @@index([token])
+}
+
+model Notification {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title         String
+  message       String
+  type          String    @default("INFO") // INFO, WARNING, URGENT, TASK, PHOTO, REPORT
+  isRead        Boolean   @default(false)
+  link          String?   // internal link to navigate
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+}

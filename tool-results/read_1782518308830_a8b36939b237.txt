@@ -1,0 +1,1250 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useMemo, useCallback } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  ArrowLeft,
+     7→  MapPin,
+     8→  Edit3,
+     9→  Share2,
+    10→  FileText,
+    11→  Plus,
+    12→  Upload,
+    13→  Image as ImageIcon,
+    14→  Tag,
+    15→  Filter,
+    16→  AlertTriangle,
+    17→  Eye,
+    18→  CheckCircle2,
+    19→  Circle,
+    20→  Clock,
+    21→  User,
+    22→  Calendar,
+    23→  MessageSquare,
+    24→  Send,
+    25→  Pin,
+    26→  StickyNote,
+    27→  ListChecks,
+    28→  FileBarChart,
+    29→  X,
+    30→  ChevronRight,
+    31→  Check,
+    32→  MoreVertical,
+    33→  CheckSquare,
+    34→  Square,
+    35→  Camera,
+    36→  ArrowRightLeft,
+    37→  Download,
+    38→  ExternalLink,
+    39→  Lock,
+    40→  Loader2,
+    41→  Search,
+    42→} from 'lucide-react';
+    43→import { useAppStore, type Photo, type Task, type ChatMessage, type ActivityEntry, type Note, type Report, type Project } from '@/store/app-store';
+    44→import {
+    45→  Tabs,
+    46→  TabsList,
+    47→  TabsTrigger,
+    48→  TabsContent,
+    49→} from '@/components/ui/tabs';
+    50→import {
+    51→  Card,
+    52→  CardContent,
+    53→  CardHeader,
+    54→  CardTitle,
+    55→  CardDescription,
+    56→} from '@/components/ui/card';
+    57→import { Button } from '@/components/ui/button';
+    58→import { Badge } from '@/components/ui/badge';
+    59→import { Input } from '@/components/ui/input';
+    60→import { Textarea } from '@/components/ui/textarea';
+    61→import { Label } from '@/components/ui/label';
+    62→import { Switch } from '@/components/ui/switch';
+    63→import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+    64→import { Progress } from '@/components/ui/progress';
+    65→import { ScrollArea } from '@/components/ui/scroll-area';
+    66→import { Separator } from '@/components/ui/separator';
+    67→import { Skeleton } from '@/components/ui/skeleton';
+    68→import { Checkbox } from '@/components/ui/checkbox';
+    69→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+    70→import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+    71→import {
+    72→  Tooltip,
+    73→  TooltipContent,
+    74→  TooltipTrigger,
+    75→} from '@/components/ui/tooltip';
+    76→import {
+    77→  DropdownMenu,
+    78→  DropdownMenuContent,
+    79→  DropdownMenuItem,
+    80→  DropdownMenuSeparator,
+    81→  DropdownMenuTrigger,
+    82→} from '@/components/ui/dropdown-menu';
+    83→import { cn } from '@/lib/utils';
+    84→import { useToast } from '@/hooks/use-toast';
+    85→import PhotoUploadModal from './photo-upload-modal';
+    86→import PhotoLightbox from './photo-lightbox';
+    87→
+    88→// ─── Status / Priority Helpers ─────────────────────────────────────
+    89→
+    90→const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+    91→  planning: { label: 'Planning', className: 'bg-slate-100 text-slate-700 border-slate-200' },
+    92→  in_progress: { label: 'In Progress', className: 'bg-amber-50 text-amber-700 border-amber-200' },
+    93→  on_hold: { label: 'On Hold', className: 'bg-orange-50 text-orange-700 border-orange-200' },
+    94→  completed: { label: 'Completed', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+    95→  cancelled: { label: 'Cancelled', className: 'bg-red-50 text-red-700 border-red-200' },
+    96→};
+    97→
+    98→const PRIORITY_CONFIG: Record<string, { label: string; className: string }> = {
+    99→  low: { label: 'Low', className: 'bg-slate-100 text-slate-600' },
+   100→  medium: { label: 'Medium', className: 'bg-amber-100 text-amber-700' },
+   101→  high: { label: 'High', className: 'bg-orange-100 text-orange-700' },
+   102→  urgent: { label: 'Urgent', className: 'bg-red-100 text-red-700' },
+   103→};
+   104→
+   105→const TASK_STATUS_CONFIG: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
+   106→  todo: { label: 'To Do', className: 'bg-slate-100 text-slate-600', icon: <Circle className="size-3.5" /> },
+   107→  in_progress: { label: 'In Progress', className: 'bg-amber-50 text-amber-700', icon: <Clock className="size-3.5" /> },
+   108→  review: { label: 'Review', className: 'bg-violet-50 text-violet-700', icon: <Eye className="size-3.5" /> },
+   109→  done: { label: 'Done', className: 'bg-emerald-50 text-emerald-700', icon: <CheckCircle2 className="size-3.5" /> },
+   110→  blocked: { label: 'Blocked', className: 'bg-red-50 text-red-700', icon: <AlertTriangle className="size-3.5" /> },
+   111→};
+   112→
+   113→const REPORT_STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+   114→  draft: { label: 'Draft', className: 'bg-slate-100 text-slate-600' },
+   115→  generating: { label: 'Generating', className: 'bg-amber-100 text-amber-700' },
+   116→  ready: { label: 'Ready', className: 'bg-emerald-100 text-emerald-700' },
+   117→  sent: { label: 'Sent', className: 'bg-sky-100 text-sky-700' },
+   118→};
+   119→
+   120→const REPORT_TYPE_CONFIG: Record<string, { label: string; className: string }> = {
+   121→  progress: { label: 'Progress', className: 'bg-violet-100 text-violet-700' },
+   122→  before_after: { label: 'Before / After', className: 'bg-teal-100 text-teal-700' },
+   123→  final: { label: 'Final', className: 'bg-emerald-100 text-emerald-700' },
+   124→  incident: { label: 'Incident', className: 'bg-red-100 text-red-700' },
+   125→};
+   126→
+   127→const ALL_TAGS = ['before', 'during', 'after', 'problem', 'progress', 'detail', 'document', 'material', 'safety', 'equipment', 'completion', 'invoice'];
+   128→
+   129→// ─── Main Component ────────────────────────────────────────────────
+   130→
+   131→interface ProjectDetailPageProps {
+   132→  projectId: string;
+   133→  onBack?: () => void;
+   134→}
+   135→
+   136→export default function ProjectDetailPage({ projectId, onBack }: ProjectDetailPageProps) {
+   137→  const { currentUser, openUploadModal, openLightbox, openTaskModal, openReportPreview, setCurrentUser } = useAppStore();
+   138→  const { toast } = useToast();
+   139→
+   140→  const [project, setProject] = useState<Project | null>(null);
+   141→  const [photos, setPhotos] = useState<Photo[]>([]);
+   142→  const [tasks, setTasks] = useState<Task[]>([]);
+   143→  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+   144→  const [activityLog, setActivityLog] = useState<ActivityEntry[]>([]);
+   145→  const [notes, setNotes] = useState<Note[]>([]);
+   146→  const [reports, setReports] = useState<Report[]>([]);
+   147→  const [loading, setLoading] = useState(true);
+   148→  const [editingName, setEditingName] = useState(false);
+   149→  const [nameDraft, setNameDraft] = useState('');
+   150→
+   151→  const isManager = currentUser?.role === 'manager';
+   152→
+   153→  // Fetch all data
+   154→  useEffect(() => {
+   155→    if (!projectId) return;
+   156→    setLoading(true);
+   157→    Promise.all([
+   158→      fetch(`/api/projects/${projectId}`).then((r) => r.json()),
+   159→      fetch(`/api/photos?projectId=${projectId}`).then((r) => r.json()),
+   160→      fetch(`/api/tasks?projectId=${projectId}`).then((r) => r.json()),
+   161→      fetch(`/api/chat?projectId=${projectId}`).then((r) => r.json()),
+   162→      fetch(`/api/activity?projectId=${projectId}`).then((r) => r.json()),
+   163→      fetch(`/api/notes?projectId=${projectId}`).then((r) => r.json()),
+   164→      fetch(`/api/reports?projectId=${projectId}`).then((r) => r.json()),
+   165→    ])
+   166→      .then(([p, ph, t, c, a, n, r]) => {
+   167→        setProject(p);
+   168→        setPhotos(Array.isArray(ph) ? ph : []);
+   169→        setTasks(Array.isArray(t) ? t : []);
+   170→        setChatMessages(Array.isArray(c) ? c : []);
+   171→        setActivityLog(Array.isArray(a) ? a : []);
+   172→        setNotes(Array.isArray(n) ? n : []);
+   173→        setReports(Array.isArray(r) ? r : []);
+   174→      })
+   175→      .catch(() => {
+   176→        toast({ title: 'Error loading project', variant: 'destructive' });
+   177→      })
+   178→      .finally(() => setLoading(false));
+   179→  }, [projectId]);
+   180→
+   181→  // Mock user for demo
+   182→  useEffect(() => {
+   183→    if (!currentUser) {
+   184→      setCurrentUser({
+   185→        id: 'u1',
+   186→        name: 'Carlos Rivera',
+   187→        email: 'carlos@castalia.com',
+   188→        role: 'manager',
+   189→      });
+   190→    }
+   191→  }, [currentUser, setCurrentUser]);
+   192→
+   193→  if (loading) return <ProjectDetailSkeleton />;
+   194→  if (!project) return <div className="p-8 text-center text-muted-foreground">Project not found.</div>;
+   195→
+   196→  const statusCfg = STATUS_CONFIG[project.status] || STATUS_CONFIG.planning;
+   197→  const priorityCfg = PRIORITY_CONFIG[project.priority] || PRIORITY_CONFIG.medium;
+   198→
+   199→  const handleNameSave = () => {
+   200→    setProject({ ...project, name: nameDraft });
+   201→    setEditingName(false);
+   202→    toast({ title: 'Project renamed', description: `Name updated to "${nameDraft}".` });
+   203→  };
+   204→
+   205→  const handleShare = () => toast({ title: 'Share link copied', description: 'Link has been copied to clipboard.' });
+   206→  const handleCreateReport = () => toast({ title: 'Report created', description: 'A new report is being generated.' });
+   207→  const handleAddTask = () => openTaskModal(projectId);
+   208→
+   209→  return (
+   210→    <div className="min-h-screen bg-background">
+   211→      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+   212→        {/* ─── Header ─── */}
+   213→        <header className="space-y-4">
+   214→          {/* Top Row */}
+   215→          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+   216→            <Button variant="ghost" size="sm" className="w-fit gap-2" onClick={onBack}>
+   217→              <ArrowLeft className="size-4" />
+   218→              Back
+   219→            </Button>
+   220→          </div>
+   221→
+   222→          {/* Name & Badges */}
+   223→          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+   224→            <div className="space-y-1.5">
+   225→              <div className="flex items-center gap-3 flex-wrap">
+   226→                {editingName && isManager ? (
+   227→                  <div className="flex items-center gap-2">
+   228→                    <Input
+   229→                      value={nameDraft}
+   230→                      onChange={(e) => setNameDraft(e.target.value)}
+   231→                      className="text-xl font-bold h-10 w-72"
+   232→                      onKeyDown={(e) => e.key === 'Enter' && handleNameSave()}
+   233→                      autoFocus
+   234→                    />
+   235→                    <Button size="icon" className="size-10" onClick={handleNameSave}>
+   236→                      <Check className="size-4" />
+   237→                    </Button>
+   238→                    <Button size="icon" variant="outline" className="size-10" onClick={() => setEditingName(false)}>
+   239→                      <X className="size-4" />
+   240→                    </Button>
+   241→                  </div>
+   242→                ) : (
+   243→                  <h1
+   244→                    className="text-xl sm:text-2xl font-bold cursor-pointer hover:text-primary/80 transition-colors"
+   245→                    onClick={() => {
+   246→                      setNameDraft(project.name);
+   247→                      setEditingName(true);
+   248→                    }}
+   249→                  >
+   250→                    {project.name}
+   251→                    {isManager && <Edit3 className="inline size-4 ml-2 text-muted-foreground" />}
+   252→                  </h1>
+   253→                )}
+   254→                <Badge variant="outline" className={cn('text-xs', statusCfg.className)}>
+   255→                  {statusCfg.label}
+   256→                </Badge>
+   257→                <Badge variant="outline" className={cn('text-xs', priorityCfg.className)}>
+   258→                  {priorityCfg.label}
+   259→                </Badge>
+   260→              </div>
+   261→              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+   262→                <MapPin className="size-3.5" />
+   263→                <span>{project.clientName}</span>
+   264→                <span className="text-muted-foreground/50 mx-1">·</span>
+   265→                <span>{project.address}</span>
+   266→              </div>
+   267→            </div>
+   268→
+   269→            {/* Action Buttons */}
+   270→            <div className="flex items-center gap-2 flex-wrap">
+   271→              {isManager && (
+   272→                <>
+   273→                  <Tooltip>
+   274→                    <TooltipTrigger asChild>
+   275→                      <Button variant="outline" size="sm" className="gap-1.5" onClick={handleShare}>
+   276→                        <Share2 className="size-3.5" />
+   277→                        <span className="hidden sm:inline">Share with Client</span>
+   278→                      </Button>
+   279→                    </TooltipTrigger>
+   280→                    <TooltipContent>Share project link with client</TooltipContent>
+   281→                  </Tooltip>
+   282→                  <Tooltip>
+   283→                    <TooltipTrigger asChild>
+   284→                      <Button variant="outline" size="sm" className="gap-1.5" onClick={handleCreateReport}>
+   285→                        <FileText className="size-3.5" />
+   286→                        <span className="hidden sm:inline">Create Report</span>
+   287→                      </Button>
+   288→                    </TooltipTrigger>
+   289→                    <TooltipContent>Generate a new report</TooltipContent>
+   290→                  </Tooltip>
+   291→                  <Tooltip>
+   292→                    <TooltipTrigger asChild>
+   293→                      <Button size="sm" className="gap-1.5" onClick={handleAddTask}>
+   294→                        <Plus className="size-3.5" />
+   295→                        <span className="hidden sm:inline">Add Task</span>
+   296→                      </Button>
+   297→                    </TooltipTrigger>
+   298→                    <TooltipContent>Add a new task</TooltipContent>
+   299→                  </Tooltip>
+   300→                </>
+   301→              )}
+   302→            </div>
+   303→          </div>
+   304→
+   305→          {/* Progress Bar */}
+   306→          <div className="space-y-1.5">
+   307→            <div className="flex items-center justify-between text-sm">
+   308→              <span className="text-muted-foreground">Overall Progress</span>
+   309→              <span className="font-semibold">{project.progress}%</span>
+   310→            </div>
+   311→            <Progress value={project.progress} className="h-2.5" />
+   312→          </div>
+   313→        </header>
+   314→
+   315→        <Separator />
+   316→
+   317→        {/* ─── Tabs ─── */}
+   318→        <Tabs defaultValue="gallery" className="space-y-4">
+   319→          <TabsList className="w-full sm:w-auto overflow-x-auto">
+   320→            <TabsTrigger value="gallery" className="gap-1.5"><ImageIcon className="size-4" />Gallery</TabsTrigger>
+   321→            <TabsTrigger value="tasks" className="gap-1.5"><ListChecks className="size-4" />Tasks</TabsTrigger>
+   322→            <TabsTrigger value="timeline" className="gap-1.5"><Clock className="size-4" />Timeline</TabsTrigger>
+   323→            {isManager && <TabsTrigger value="notes" className="gap-1.5"><StickyNote className="size-4" />Notes</TabsTrigger>}
+   324→            <TabsTrigger value="chat" className="gap-1.5"><MessageSquare className="size-4" />Chat</TabsTrigger>
+   325→            <TabsTrigger value="reports" className="gap-1.5"><FileBarChart className="size-4" />Reports</TabsTrigger>
+   326→          </TabsList>
+   327→
+   328→          {/* ─── GALLERY TAB ─── */}
+   329→          <TabsContent value="gallery" className="space-y-4">
+   330→            <GalleryTab photos={photos} projectId={projectId} />
+   331→          </TabsContent>
+   332→
+   333→          {/* ─── TASKS TAB ─── */}
+   334→          <TabsContent value="tasks" className="space-y-4">
+   335→            <TasksTab tasks={tasks} projectId={projectId} />
+   336→          </TabsContent>
+   337→
+   338→          {/* ─── TIMELINE TAB ─── */}
+   339→          <TabsContent value="timeline">
+   340→            <TimelineTab entries={activityLog} />
+   341→          </TabsContent>
+   342→
+   343→          {/* ─── NOTES TAB (Managers Only) ─── */}
+   344→          {isManager && (
+   345→            <TabsContent value="notes">
+   346→              <NotesTab notes={notes} projectId={projectId} />
+   347→            </TabsContent>
+   348→          )}
+   349→
+   350→          {/* ─── CHAT TAB ─── */}
+   351→          <TabsContent value="chat">
+   352→            <ChatTab messages={chatMessages} projectId={projectId} isManager={isManager} />
+   353→          </TabsContent>
+   354→
+   355→          {/* ─── REPORTS TAB ─── */}
+   356→          <TabsContent value="reports" className="space-y-4">
+   357→            <ReportsTab reports={reports} projectId={projectId} />
+   358→          </TabsContent>
+   359→        </Tabs>
+   360→      </div>
+   361→
+   362→      {/* Global Modals */}
+   363→      <PhotoUploadModal />
+   364→      <PhotoLightbox photos={photos} />
+   365→    </div>
+   366→  );
+   367→}
+   368→
+   369→// ═══════════════════════════════════════════════════════════════════
+   370→//  GALLERY TAB
+   371→// ═══════════════════════════════════════════════════════════════════
+   372→
+   373→function GalleryTab({ photos, projectId }: { photos: Photo[]; projectId: string }) {
+   374→  const { openUploadModal, openLightbox } = useAppStore();
+   375→  const { toast } = useToast();
+   376→  const [activeFilter, setActiveFilter] = useState<string | null>(null);
+   377→  const [showSummary, setShowSummary] = useState(false);
+   378→
+   379→  const filteredPhotos = useMemo(() => {
+   380→    if (!activeFilter) return photos;
+   381→    return photos.filter((p) => p.tags.includes(activeFilter));
+   382→  }, [photos, activeFilter]);
+   383→
+   384→  const beforePhotos = useMemo(() => photos.filter((p) => p.tags.includes('before')), [photos]);
+   385→  const afterPhotos = useMemo(() => photos.filter((p) => p.tags.includes('after')), [photos]);
+   386→
+   387→  const earliestBefore = useMemo(() => {
+   388→    if (beforePhotos.length === 0) return null;
+   389→    return beforePhotos.reduce((earliest, p) => (p.createdAt < earliest.createdAt ? p : earliest), beforePhotos[0]).createdAt;
+   390→  }, [beforePhotos]);
+   391→
+   392→  const latestAfter = useMemo(() => {
+   393→    if (afterPhotos.length === 0) return null;
+   394→    return afterPhotos.reduce((latest, p) => (p.createdAt > latest.createdAt ? p : latest), afterPhotos[0]).createdAt;
+   395→  }, [afterPhotos]);
+   396→
+   397→  return (
+   398→    <div className="space-y-4">
+   399→      {/* Toolbar */}
+   400→      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+   401→        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+   402→          <Filter className="size-4 text-muted-foreground shrink-0" />
+   403→          <Badge
+   404→            variant={activeFilter === null ? 'default' : 'outline'}
+   405→            className="cursor-pointer select-none"
+   406→            onClick={() => setActiveFilter(null)}
+   407→          >
+   408→            All ({photos.length})
+   409→          </Badge>
+   410→          {ALL_TAGS.map((tag) => {
+   411→            const count = photos.filter((p) => p.tags.includes(tag)).length;
+   412→            if (count === 0) return null;
+   413→            return (
+   414→              <Badge
+   415→                key={tag}
+   416→                variant={activeFilter === tag ? 'default' : 'outline'}
+   417→                className="cursor-pointer select-none capitalize"
+   418→                onClick={() => setActiveFilter(activeFilter === tag ? null : tag)}
+   419→              >
+   420→                {tag} ({count})
+   421→              </Badge>
+   422→            );
+   423→          })}
+   424→        </div>
+   425→        <div className="flex items-center gap-2 shrink-0">
+   426→          {beforePhotos.length > 0 && afterPhotos.length > 0 && (
+   427→            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowSummary(!showSummary)}>
+   428→              <ArrowRightLeft className="size-3.5" />
+   429→              {showSummary ? 'Hide Summary' : 'Image Summary'}
+   430→            </Button>
+   431→          )}
+   432→          <Button size="sm" className="gap-1.5" onClick={() => openUploadModal(projectId)}>
+   433→            <Upload className="size-3.5" />
+   434→            Upload
+   435→          </Button>
+   436→        </div>
+   437→      </div>
+   438→
+   439→      {/* Image Summary Panel */}
+   440→      <AnimatePresence>
+   441→        {showSummary && (
+   442→          <motion.div
+   443→            initial={{ opacity: 0, height: 0 }}
+   444→            animate={{ opacity: 1, height: 'auto' }}
+   445→            exit={{ opacity: 0, height: 0 }}
+   446→            className="overflow-hidden"
+   447→          >
+   448→            <Card className="border-2 border-primary/20">
+   449→              <CardHeader className="pb-3">
+   450→                <CardTitle className="text-lg flex items-center gap-2">
+   451→                  <ArrowRightLeft className="size-5 text-primary" />
+   452→                  Project Progress Summary
+   453→                </CardTitle>
+   454→                <CardDescription>
+   455→                  {beforePhotos.length > 0 && afterPhotos.length > 0
+   456→                    ? `Visual comparison showing ${beforePhotos.length} "before" and ${afterPhotos.length} "after" photos from ${earliestBefore ? new Date(earliestBefore).toLocaleDateString() : 'start'} to ${latestAfter ? new Date(latestAfter).toLocaleDateString() : 'now'}.`
+   457→                    : 'Upload before and after photos to see a progress comparison.'}
+   458→                </CardDescription>
+   459→              </CardHeader>
+   460→              <CardContent>
+   461→                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+   462→                  {/* Before Column */}
+   463→                  <div>
+   464→                    <div className="flex items-center gap-2 mb-3">
+   465→                      <div className="h-px flex-1 bg-amber-300" />
+   466→                      <Badge className="bg-amber-100 text-amber-800 border-amber-200">BEFORE</Badge>
+   467→                      <div className="h-px flex-1 bg-amber-300" />
+   468→                    </div>
+   469→                    <div className="grid grid-cols-2 gap-2">
+   470→                      {beforePhotos.map((photo) => (
+   471→                        <div
+   472→                          key={photo.id}
+   473→                          className="relative group aspect-[4/3] rounded-lg overflow-hidden border cursor-pointer"
+   474→                          onClick={() => openLightbox(photo.id)}
+   475→                        >
+   476→                          <img src={photo.url} alt={photo.caption || 'Before'} className="object-cover size-full" />
+   477→                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+   478→                          <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+   479→                            <p className="text-white text-xs truncate">{photo.caption}</p>
+   480→                            <p className="text-white/70 text-[10px]">{new Date(photo.createdAt).toLocaleDateString()}</p>
+   481→                          </div>
+   482→                        </div>
+   483→                      ))}
+   484→                    </div>
+   485→                  </div>
+   486→
+   487→                  {/* After Column */}
+   488→                  <div>
+   489→                    <div className="flex items-center gap-2 mb-3">
+   490→                      <div className="h-px flex-1 bg-emerald-300" />
+   491→                      <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">AFTER</Badge>
+   492→                      <div className="h-px flex-1 bg-emerald-300" />
+   493→                    </div>
+   494→                    <div className="grid grid-cols-2 gap-2">
+   495→                      {afterPhotos.map((photo) => (
+   496→                        <div
+   497→                          key={photo.id}
+   498→                          className="relative group aspect-[4/3] rounded-lg overflow-hidden border cursor-pointer"
+   499→                          onClick={() => openLightbox(photo.id)}
+   500→                        >
+   501→                          <img src={photo.url} alt={photo.caption || 'After'} className="object-cover size-full" />
+   502→                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+   503→                          <div className="absolute bottom-2 left-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+   504→                            <p className="text-white text-xs truncate">{photo.caption}</p>
+   505→                            <p className="text-white/70 text-[10px]">{new Date(photo.createdAt).toLocaleDateString()}</p>
+   506→                          </div>
+   507→                        </div>
+   508→                      ))}
+   509→                    </div>
+   510→                  </div>
+   511→                </div>
+   512→              </CardContent>
+   513→            </Card>
+   514→          </motion.div>
+   515→        )}
+   516→      </AnimatePresence>
+   517→
+   518→      {/* Photo Grid */}
+   519→      {filteredPhotos.length === 0 ? (
+   520→        <div className="text-center py-16 text-muted-foreground">
+   521→          <Camera className="size-12 mx-auto mb-3 opacity-30" />
+   522→          <p className="font-medium">No photos yet</p>
+   523→          <p className="text-sm mt-1">Upload the first photo to get started.</p>
+   524→        </div>
+   525→      ) : (
+   526→        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+   527→          {filteredPhotos.map((photo, i) => (
+   528→            <motion.div
+   529→              key={photo.id}
+   530→              initial={{ opacity: 0, y: 12 }}
+   531→              animate={{ opacity: 1, y: 0 }}
+   532→              transition={{ delay: i * 0.03 }}
+   533→              className="group"
+   534→            >
+   535→              <div
+   536→                className="relative aspect-[4/3] rounded-lg overflow-hidden border bg-muted cursor-pointer"
+   537→                onClick={() => openLightbox(photo.id)}
+   538→              >
+   539→                <img
+   540→                  src={photo.thumbnailUrl || photo.url}
+   541→                  alt={photo.caption || 'Project photo'}
+   542→                  className="object-cover size-full transition-transform duration-200 group-hover:scale-105"
+   543→                />
+   544→                {/* Urgent indicator */}
+   545→                {photo.isUrgent && (
+   546→                  <div className="absolute top-2 left-2">
+   547→                    <Badge variant="destructive" className="gap-1 text-[10px]">
+   548→                      <AlertTriangle className="size-3" />
+   549→                      Urgent
+   550→                    </Badge>
+   551→                  </div>
+   552→                )}
+   553→                {/* Visible to client */}
+   554→                {photo.visibleToClient && (
+   555→                  <div className="absolute top-2 right-2">
+   556→                    <Badge variant="secondary" className="gap-1 text-[10px] bg-white/90 text-foreground">
+   557→                      <Eye className="size-3" />
+   558→                      Client
+   559→                    </Badge>
+   560→                  </div>
+   561→                )}
+   562→                {/* Hover overlay */}
+   563→                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2.5">
+   564→                  <div className="flex-1 min-w-0">
+   565→                    {photo.caption && (
+   566→                      <p className="text-white text-xs font-medium truncate">{photo.caption}</p>
+   567→                    )}
+   568→                    <div className="flex items-center gap-1.5 mt-1">
+   569→                      <div className="size-5 rounded-full bg-white/20 flex items-center justify-center text-[10px] text-white font-medium">
+   570→                        {photo.uploaderName.charAt(0)}
+   571→                      </div>
+   572→                      <span className="text-white/80 text-[10px]">{photo.uploaderName}</span>
+   573→                      <span className="text-white/50 text-[10px]">·</span>
+   574→                      <span className="text-white/50 text-[10px]">
+   575→                        {new Date(photo.createdAt).toLocaleDateString()}
+   576→                      </span>
+   577→                    </div>
+   578→                  </div>
+   579→                </div>
+   580→              </div>
+   581→              {/* Tags row */}
+   582→              <div className="flex flex-wrap gap-1 mt-1.5 px-0.5">
+   583→                {photo.tags.slice(0, 3).map((tag) => (
+   584→                  <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0 capitalize">
+   585→                    {tag}
+   586→                  </Badge>
+   587→                ))}
+   588→                {photo.tags.length > 3 && (
+   589→                  <span className="text-[10px] text-muted-foreground">+{photo.tags.length - 3}</span>
+   590→                )}
+   591→              </div>
+   592→            </motion.div>
+   593→          ))}
+   594→        </div>
+   595→      )}
+   596→    </div>
+   597→  );
+   598→}
+   599→
+   600→// ═══════════════════════════════════════════════════════════════════
+   601→//  TASKS TAB
+   602→// ═══════════════════════════════════════════════════════════════════
+   603→
+   604→function TasksTab({ tasks, projectId }: { tasks: Task[]; projectId: string }) {
+   605→  const { openTaskModal } = useAppStore();
+   606→  const [statusFilter, setStatusFilter] = useState<string>('all');
+   607→  const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
+   608→
+   609→  const assignees = useMemo(() => {
+   610→    const set = new Set<string>();
+   611→    tasks.forEach((t) => { if (t.assigneeName) set.add(t.assigneeName); });
+   612→    return Array.from(set);
+   613→  }, [tasks]);
+   614→
+   615→  const filteredTasks = useMemo(() => {
+   616→    return tasks.filter((t) => {
+   617→      if (statusFilter !== 'all' && t.status !== statusFilter) return false;
+   618→      if (assigneeFilter !== 'all' && t.assigneeName !== assigneeFilter) return false;
+   619→      return true;
+   620→    });
+   621→  }, [tasks, statusFilter, assigneeFilter]);
+   622→
+   623→  return (
+   624→    <div className="space-y-4">
+   625→      {/* Filters & Actions */}
+   626→      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+   627→        <div className="flex items-center gap-2 flex-wrap">
+   628→          <Select value={statusFilter} onValueChange={setStatusFilter}>
+   629→            <SelectTrigger size="sm" className="w-[140px]">
+   630→              <SelectValue placeholder="Status" />
+   631→            </SelectTrigger>
+   632→            <SelectContent>
+   633→              <SelectItem value="all">All Statuses</SelectItem>
+   634→              {Object.entries(TASK_STATUS_CONFIG).map(([key, cfg]) => (
+   635→                <SelectItem key={key} value={key}>{cfg.label}</SelectItem>
+   636→              ))}
+   637→            </SelectContent>
+   638→          </Select>
+   639→          <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+   640→            <SelectTrigger size="sm" className="w-[160px]">
+   641→              <SelectValue placeholder="Assignee" />
+   642→            </SelectTrigger>
+   643→            <SelectContent>
+   644→              <SelectItem value="all">All Assignees</SelectItem>
+   645→              {assignees.map((name) => (
+   646→                <SelectItem key={name} value={name}>{name}</SelectItem>
+   647→              ))}
+   648→            </SelectContent>
+   649→          </Select>
+   650→          <span className="text-sm text-muted-foreground">{filteredTasks.length} task(s)</span>
+   651→        </div>
+   652→        <Button size="sm" className="gap-1.5" onClick={() => openTaskModal(projectId)}>
+   653→          <Plus className="size-3.5" />
+   654→          New Task
+   655→        </Button>
+   656→      </div>
+   657→
+   658→      {/* Task List */}
+   659→      {filteredTasks.length === 0 ? (
+   660→        <div className="text-center py-16 text-muted-foreground">
+   661→          <ListChecks className="size-12 mx-auto mb-3 opacity-30" />
+   662→          <p className="font-medium">No tasks found</p>
+   663→          <p className="text-sm mt-1">Create a task or adjust your filters.</p>
+   664→        </div>
+   665→      ) : (
+   666→        <div className="grid gap-3">
+   667→          {filteredTasks.map((task, i) => {
+   668→            const statusCfg = TASK_STATUS_CONFIG[task.status] || TASK_STATUS_CONFIG.todo;
+   669→            const priorityCfg = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
+   670→            const completedChecklist = task.checklistItems.filter((c) => c.completed).length;
+   671→            const totalChecklist = task.checklistItems.length;
+   672→            const checklistPercent = totalChecklist > 0 ? Math.round((completedChecklist / totalChecklist) * 100) : 0;
+   673→
+   674→            return (
+   675→              <motion.div
+   676→                key={task.id}
+   677→                initial={{ opacity: 0, y: 8 }}
+   678→                animate={{ opacity: 1, y: 0 }}
+   679→                transition={{ delay: i * 0.03 }}
+   680→              >
+   681→                <Card className="py-4 hover:shadow-md transition-shadow cursor-pointer" onClick={() => openTaskModal(projectId, task.id)}>
+   682→                  <CardContent className="px-5">
+   683→                    <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+   684→                      <div className="flex-1 min-w-0 space-y-1.5">
+   685→                        <div className="flex items-center gap-2 flex-wrap">
+   686→                          <h3 className="font-medium text-sm">{task.title}</h3>
+   687→                          <Badge variant="outline" className={cn('text-[10px]', statusCfg.className)}>
+   688→                            {statusCfg.icon}
+   689→                            {statusCfg.label}
+   690→                          </Badge>
+   691→                          <Badge variant="secondary" className={cn('text-[10px]', priorityCfg.className)}>
+   692→                            {priorityCfg.label}
+   693→                          </Badge>
+   694→                        </div>
+   695→                        {task.description && (
+   696→                          <p className="text-sm text-muted-foreground line-clamp-1">{task.description}</p>
+   697→                        )}
+   698→                        {/* Checklist Progress */}
+   699→                        {totalChecklist > 0 && (
+   700→                          <div className="flex items-center gap-2">
+   701→                            <div className="flex-1 max-w-[160px]">
+   702→                              <Progress value={checklistPercent} className="h-1.5" />
+   703→                            </div>
+   704→                            <span className="text-[11px] text-muted-foreground">
+   705→                              {completedChecklist}/{totalChecklist}
+   706→                            </span>
+   707→                          </div>
+   708→                        )}
+   709→                      </div>
+   710→                      <div className="flex items-center gap-3 shrink-0">
+   711→                        {task.dueDate && (
+   712→                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+   713→                            <Calendar className="size-3" />
+   714→                            {new Date(task.dueDate).toLocaleDateString()}
+   715→                          </div>
+   716→                        )}
+   717→                        {task.assigneeName && (
+   718→                          <Tooltip>
+   719→                            <TooltipTrigger asChild>
+   720→                              <Avatar className="size-7">
+   721→                                <AvatarFallback className="text-[10px]">
+   722→                                  {task.assigneeName.split(' ').map((n) => n[0]).join('')}
+   723→                                </AvatarFallback>
+   724→                              </Avatar>
+   725→                            </TooltipTrigger>
+   726→                            <TooltipContent>{task.assigneeName}</TooltipContent>
+   727→                          </Tooltip>
+   728→                        )}
+   729→                      </div>
+   730→                    </div>
+   731→                  </CardContent>
+   732→                </Card>
+   733→              </motion.div>
+   734→            );
+   735→          })}
+   736→        </div>
+   737→      )}
+   738→    </div>
+   739→  );
+   740→}
+   741→
+   742→// ═══════════════════════════════════════════════════════════════════
+   743→//  TIMELINE TAB
+   744→// ═══════════════════════════════════════════════════════════════════
+   745→
+   746→function TimelineTab({ entries }: { entries: ActivityEntry[] }) {
+   747→  const sorted = useMemo(() => {
+   748→    return [...entries].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+   749→  }, [entries]);
+   750→
+   751→  const formatDate = (dateStr: string) => {
+   752→    const d = new Date(dateStr);
+   753→    const now = new Date();
+   754→    const diffMs = now.getTime() - d.getTime();
+   755→    const diffMins = Math.floor(diffMs / 60000);
+   756→    const diffHours = Math.floor(diffMins / 60);
+   757→    const diffDays = Math.floor(diffHours / 24);
+   758→
+   759→    if (diffMins < 1) return 'Just now';
+   760→    if (diffMins < 60) return `${diffMins}m ago`;
+   761→    if (diffHours < 24) return `${diffHours}h ago`;
+   762→    if (diffDays < 7) return `${diffDays}d ago`;
+   763→    return d.toLocaleDateString();
+   764→  };
+   765→
+   766→  return (
+   767→    <div>
+   768→      {sorted.length === 0 ? (
+   769→        <div className="text-center py-16 text-muted-foreground">
+   770→          <Clock className="size-12 mx-auto mb-3 opacity-30" />
+   771→          <p className="font-medium">No activity yet</p>
+   772→          <p className="text-sm mt-1">Activity will appear here as the project progresses.</p>
+   773→        </div>
+   774→      ) : (
+   775→        <div className="relative max-w-2xl mx-auto">
+   776→          {/* Vertical line */}
+   777→          <div className="absolute left-[18px] top-2 bottom-2 w-px bg-border" />
+   778→
+   779→          <div className="space-y-6">
+   780→            {sorted.map((entry, i) => (
+   781→              <motion.div
+   782→                key={entry.id}
+   783→                initial={{ opacity: 0, x: -12 }}
+   784→                animate={{ opacity: 1, x: 0 }}
+   785→                transition={{ delay: i * 0.04 }}
+   786→                className="relative flex gap-4 pl-2"
+   787→              >
+   788→                {/* Dot */}
+   789→                <div className="relative z-10 mt-1.5">
+   790→                  <div className="size-[18px] rounded-full border-2 border-primary bg-background flex items-center justify-center">
+   791→                    <Avatar className="size-4">
+   792→                      {entry.userAvatar ? (
+   793→                        <AvatarImage src={entry.userAvatar} />
+   794→                      ) : (
+   795→                        <AvatarFallback className="text-[8px]">{entry.userName.charAt(0)}</AvatarFallback>
+   796→                      )}
+   797→                    </Avatar>
+   798→                  </div>
+   799→                </div>
+   800→
+   801→                {/* Content */}
+   802→                <div className="flex-1 min-w-0 pb-2">
+   803→                  <div className="bg-card rounded-lg border p-3">
+   804→                    <div className="flex items-center gap-2 mb-1">
+   805→                      <span className="text-sm font-medium">{entry.userName}</span>
+   806→                      <span className="text-[11px] text-muted-foreground">{formatDate(entry.createdAt)}</span>
+   807→                    </div>
+   808→                    <p className="text-sm text-muted-foreground">{entry.action}</p>
+   809→                    {entry.entityLabel && (
+   810→                      <Badge variant="secondary" className="mt-2 text-[10px] gap-1">
+   811→                        {entry.entityType && <>{entry.entityType}</>}
+   812→                        {entry.entityLabel && <ChevronRight className="size-2.5" />}
+   813→                        {entry.entityLabel}
+   814→                      </Badge>
+   815→                    )}
+   816→                  </div>
+   817→                </div>
+   818→              </motion.div>
+   819→            ))}
+   820→          </div>
+   821→        </div>
+   822→      )}
+   823→    </div>
+   824→  );
+   825→}
+   826→
+   827→// ═══════════════════════════════════════════════════════════════════
+   828→//  NOTES TAB (Managers Only)
+   829→// ═══════════════════════════════════════════════════════════════════
+   830→
+   831→function NotesTab({ notes: initialNotes, projectId }: { notes: Note[]; projectId: string }) {
+   832→  const [notes, setNotes] = useState(initialNotes);
+   833→  const [newNote, setNewNote] = useState('');
+   834→  const { toast } = useToast();
+   835→
+   836→  const addNote = () => {
+   837→    if (!newNote.trim()) return;
+   838→    const note: Note = {
+   839→      id: Date.now().toString(),
+   840→      projectId,
+   841→      authorId: 'u1',
+   842→      authorName: 'Carlos Rivera',
+   843→      content: newNote.trim(),
+   844→      isPinned: false,
+   845→      createdAt: new Date().toISOString(),
+   846→      updatedAt: new Date().toISOString(),
+   847→    };
+   848→    setNotes([note, ...notes]);
+   849→    setNewNote('');
+   850→    toast({ title: 'Note added' });
+   851→  };
+   852→
+   853→  const togglePin = (id: string) => {
+   854→    setNotes(notes.map((n) => (n.id === id ? { ...n, isPinned: !n.isPinned } : n)));
+   855→  };
+   856→
+   857→  const sorted = useMemo(() => {
+   858→    return [...notes].sort((a, b) => {
+   859→      if (a.isPinned && !b.isPinned) return -1;
+   860→      if (!a.isPinned && b.isPinned) return 1;
+   861→      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+   862→    });
+   863→  }, [notes]);
+   864→
+   865→  return (
+   866→    <div className="max-w-2xl mx-auto space-y-4">
+   867→      {/* Add Note */}
+   868→      <Card>
+   869→        <CardContent className="pt-6">
+   870→          <div className="space-y-3">
+   871→            <Textarea
+   872→              placeholder="Write an internal note... (use @ to mention team members)"
+   873→              value={newNote}
+   874→              onChange={(e) => setNewNote(e.target.value)}
+   875→              rows={3}
+   876→              onKeyDown={(e) => {
+   877→                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) addNote();
+   878→              }}
+   879→            />
+   880→            <div className="flex items-center justify-between">
+   881→              <span className="text-xs text-muted-foreground">
+   882→                <Lock className="inline size-3 mr-1" />
+   883→                Only visible to managers
+   884→              </span>
+   885→              <Button size="sm" onClick={addNote} disabled={!newNote.trim()}>
+   886→                <Plus className="size-3.5 mr-1" />
+   887→                Add Note
+   888→              </Button>
+   889→            </div>
+   890→          </div>
+   891→        </CardContent>
+   892→      </Card>
+   893→
+   894→      {/* Notes List */}
+   895→      {sorted.length === 0 ? (
+   896→        <div className="text-center py-12 text-muted-foreground">
+   897→          <StickyNote className="size-12 mx-auto mb-3 opacity-30" />
+   898→          <p className="font-medium">No notes yet</p>
+   899→        </div>
+   900→      ) : (
+   901→        <div className="space-y-3">
+   902→          {sorted.map((note) => (
+   903→            <motion.div
+   904→              key={note.id}
+   905→              layout
+   906→              initial={{ opacity: 0, y: 8 }}
+   907→              animate={{ opacity: 1, y: 0 }}
+   908→            >
+   909→              <Card className={cn('py-4', note.isPinned && 'border-primary/30 bg-primary/[0.02]')}>
+   910→                <CardContent className="px-5">
+   911→                  <div className="flex items-start justify-between gap-3">
+   912→                    <div className="space-y-1.5 flex-1">
+   913→                      {note.isPinned && (
+   914→                        <Badge variant="secondary" className="text-[10px] gap-1">
+   915→                          <Pin className="size-2.5" />
+   916→                          Pinned
+   917→                        </Badge>
+   918→                      )}
+   919→                      <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+   920→                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+   921→                        <span>{note.authorName}</span>
+   922→                        <span>·</span>
+   923→                        <span>{new Date(note.createdAt).toLocaleString()}</span>
+   924→                      </div>
+   925→                    </div>
+   926→                    <Button
+   927→                      variant="ghost"
+   928→                      size="icon"
+   929→                      className="size-8 shrink-0"
+   930→                      onClick={() => togglePin(note.id)}
+   931→                    >
+   932→                      <Pin className={cn('size-4', note.isPinned && 'text-primary fill-primary')} />
+   933→                    </Button>
+   934→                  </div>
+   935→                </CardContent>
+   936→              </Card>
+   937→            </motion.div>
+   938→          ))}
+   939→        </div>
+   940→      )}
+   941→    </div>
+   942→  );
+   943→}
+   944→
+   945→// ═══════════════════════════════════════════════════════════════════
+   946→//  CHAT TAB
+   947→// ═══════════════════════════════════════════════════════════════════
+   948→
+   949→function ChatTab({ messages: initialMessages, projectId, isManager }: { messages: ChatMessage[]; projectId: string; isManager: boolean }) {
+   950→  const [messages, setMessages] = useState(initialMessages);
+   951→  const [newMessage, setNewMessage] = useState('');
+   952→  const [internalOnly, setInternalOnly] = useState(false);
+   953→  const scrollRef = useRef<HTMLDivElement>(null);
+   954→  const { currentUser } = useAppStore();
+   955→
+   956→  useEffect(() => {
+   957→    if (scrollRef.current) {
+   958→      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+   959→    }
+   960→  }, [messages]);
+   961→
+   962→  const sendMessage = () => {
+   963→    if (!newMessage.trim()) return;
+   964→    const msg: ChatMessage = {
+   965→      id: Date.now().toString(),
+   966→      projectId,
+   967→      senderId: currentUser?.id || 'u1',
+   968→      senderName: currentUser?.name || 'You',
+   969→      senderAvatar: currentUser?.avatar,
+   970→      content: newMessage.trim(),
+   971→      isInternal: internalOnly,
+   972→      createdAt: new Date().toISOString(),
+   973→    };
+   974→    setMessages((prev) => [...prev, msg]);
+   975→    setNewMessage('');
+   976→  };
+   977→
+   978→  return (
+   979→    <div className="flex flex-col h-[calc(100vh-340px)] min-h-[400px] max-h-[700px] border rounded-xl overflow-hidden bg-card">
+   980→      {/* Chat Header */}
+   981→      <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+   982→        <h3 className="text-sm font-medium">Project Chat</h3>
+   983→        {isManager && (
+   984→          <div className="flex items-center gap-2">
+   985→            <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
+   986→              <Lock className="size-3" />
+   987→              Internal only
+   988→            </Label>
+   989→            <Switch checked={internalOnly} onCheckedChange={setInternalOnly} />
+   990→          </div>
+   991→        )}
+   992→      </div>
+   993→
+   994→      {/* Messages */}
+   995→      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+   996→        {messages.length === 0 && (
+   997→          <div className="text-center py-12 text-muted-foreground">
+   998→            <MessageSquare className="size-10 mx-auto mb-2 opacity-30" />
+   999→            <p className="text-sm">No messages yet. Start the conversation!</p>
+  1000→          </div>
+  1001→        )}
+  1002→        {messages.map((msg) => {
+  1003→          const isOwn = msg.senderId === currentUser?.id;
+  1004→          return (
+  1005→            <motion.div
+  1006→              key={msg.id}
+  1007→              initial={{ opacity: 0, y: 8 }}
+  1008→              animate={{ opacity: 1, y: 0 }}
+  1009→              className={cn('flex gap-2.5', isOwn ? 'flex-row-reverse' : 'flex-row')}
+  1010→            >
+  1011→              <Avatar className="size-8 shrink-0 mt-0.5">
+  1012→                {msg.senderAvatar ? (
+  1013→                  <AvatarImage src={msg.senderAvatar} />
+  1014→                ) : (
+  1015→                  <AvatarFallback className="text-xs">
+  1016→                    {msg.senderName.split(' ').map((n) => n[0]).join('')}
+  1017→                  </AvatarFallback>
+  1018→                )}
+  1019→              </Avatar>
+  1020→              <div className={cn('max-w-[70%] space-y-1', isOwn ? 'items-end' : 'items-start')}>
+  1021→                <div className="flex items-center gap-2">
+  1022→                  {!isOwn && <span className="text-xs font-medium">{msg.senderName}</span>}
+  1023→                  <span className="text-[10px] text-muted-foreground">
+  1024→                    {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+  1025→                  </span>
+  1026→                  {msg.isInternal && (
+  1027→                    <Badge variant="outline" className="text-[9px] gap-0.5 px-1 py-0">
+  1028→                      <Lock className="size-2.5" />
+  1029→                      Internal
+  1030→                    </Badge>
+  1031→                  )}
+  1032→                </div>
+  1033→                <div
+  1034→                  className={cn(
+  1035→                    'rounded-xl px-3.5 py-2.5 text-sm',
+  1036→                    isOwn
+  1037→                      ? 'bg-primary text-primary-foreground rounded-br-sm'
+  1038→                      : 'bg-muted rounded-bl-sm'
+  1039→                  )}
+  1040→                >
+  1041→                  {msg.content}
+  1042→                </div>
+  1043→              </div>
+  1044→            </motion.div>
+  1045→          );
+  1046→        })}
+  1047→      </div>
+  1048→
+  1049→      {/* Input */}
+  1050→      <div className="border-t p-3 bg-muted/30">
+  1051→        <div className="flex items-center gap-2">
+  1052→          <Input
+  1053→            value={newMessage}
+  1054→            onChange={(e) => setNewMessage(e.target.value)}
+  1055→            placeholder={internalOnly ? 'Internal message...' : 'Type a message...'}
+  1056→            className="flex-1"
+  1057→            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+  1058→          />
+  1059→          <Button size="icon" onClick={sendMessage} disabled={!newMessage.trim()}>
+  1060→            <Send className="size-4" />
+  1061→          </Button>
+  1062→        </div>
+  1063→      </div>
+  1064→    </div>
+  1065→  );
+  1066→}
+  1067→
+  1068→function Label({ className, children, ...props }: React.ComponentProps<'label'>) {
+  1069→  return (
+  1070→    <label className={className} {...props}>
+  1071→      {children}
+  1072→    </label>
+  1073→  );
+  1074→}
+  1075→
+  1076→function Send({ className }: { className?: string }) {
+  1077→  return (
+  1078→    <svg
+  1079→      xmlns="http://www.w3.org/2000/svg"
+  1080→      viewBox="0 0 24 24"
+  1081→      fill="none"
+  1082→      stroke="currentColor"
+  1083→      strokeWidth="2"
+  1084→      strokeLinecap="round"
+  1085→      strokeLinejoin="round"
+  1086→      className={className}
+  1087→    >
+  1088→      <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" />
+  1089→      <path d="m21.854 2.147-10.94 10.939" />
+  1090→    </svg>
+  1091→  );
+  1092→}
+  1093→
+  1094→// ═══════════════════════════════════════════════════════════════════
+  1095→//  REPORTS TAB
+  1096→// ═══════════════════════════════════════════════════════════════════
+  1097→
+  1098→function ReportsTab({ reports, projectId }: { reports: Report[]; projectId: string }) {
+  1099→  const { openReportPreview } = useAppStore();
+  1100→  const { toast } = useToast();
+  1101→  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  1102→
+  1103→  const handleCreate = (type: string) => {
+  1104→    setCreateDialogOpen(false);
+  1105→    toast({ title: 'Report generating...', description: `A ${type} report is being created.` });
+  1106→  };
+  1107→
+  1108→  return (
+  1109→    <div className="space-y-4">
+  1110→      <div className="flex items-center justify-between">
+  1111→        <span className="text-sm text-muted-foreground">{reports.length} report(s)</span>
+  1112→        <Button size="sm" className="gap-1.5" onClick={() => setCreateDialogOpen(true)}>
+  1113→          <Plus className="size-3.5" />
+  1114→          Create Report
+  1115→        </Button>
+  1116→      </div>
+  1117→
+  1118→      {reports.length === 0 ? (
+  1119→        <div className="text-center py-16 text-muted-foreground">
+  1120→          <FileBarChart className="size-12 mx-auto mb-3 opacity-30" />
+  1121→          <p className="font-medium">No reports yet</p>
+  1122→          <p className="text-sm mt-1">Create your first report for this project.</p>
+  1123→        </div>
+  1124→      ) : (
+  1125→        <div className="grid gap-3">
+  1126→          {reports.map((report, i) => {
+  1127→            const statusCfg = REPORT_STATUS_CONFIG[report.status] || REPORT_STATUS_CONFIG.draft;
+  1128→            const typeCfg = REPORT_TYPE_CONFIG[report.type] || REPORT_TYPE_CONFIG.progress;
+  1129→
+  1130→            return (
+  1131→              <motion.div
+  1132→                key={report.id}
+  1133→                initial={{ opacity: 0, y: 8 }}
+  1134→                animate={{ opacity: 1, y: 0 }}
+  1135→                transition={{ delay: i * 0.03 }}
+  1136→              >
+  1137→                <Card className="py-4 hover:shadow-md transition-shadow cursor-pointer" onClick={() => openReportPreview(report.id)}>
+  1138→                  <CardContent className="px-5">
+  1139→                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+  1140→                      <div className="space-y-1.5">
+  1141→                        <div className="flex items-center gap-2 flex-wrap">
+  1142→                          <h3 className="font-medium text-sm">{report.title}</h3>
+  1143→                          <Badge variant="outline" className={cn('text-[10px]', typeCfg.className)}>
+  1144→                            {typeCfg.label}
+  1145→                          </Badge>
+  1146→                          <Badge variant="outline" className={cn('text-[10px]', statusCfg.className)}>
+  1147→                            {statusCfg.label}
+  1148→                          </Badge>
+  1149→                        </div>
+  1150→                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+  1151→                          <span>{new Date(report.createdAt).toLocaleDateString()}</span>
+  1152→                          <span>by {report.generatorName}</span>
+  1153→                        </div>
+  1154→                      </div>
+  1155→                      <div className="flex items-center gap-2">
+  1156→                        {report.status === 'ready' && (
+  1157→                          <Button variant="outline" size="sm" className="gap-1.5" onClick={(e) => {
+  1158→                            e.stopPropagation();
+  1159→                            toast({ title: 'Downloading report...' });
+  1160→                          }}>
+  1161→                            <Download className="size-3.5" />
+  1162→                            Download
+  1163→                          </Button>
+  1164→                        )}
+  1165→                        <Button variant="ghost" size="sm" className="gap-1.5">
+  1166→                          <ExternalLink className="size-3.5" />
+  1167→                          Preview
+  1168→                        </Button>
+  1169→                      </div>
+  1170→                    </div>
+  1171→                  </CardContent>
+  1172→                </Card>
+  1173→              </motion.div>
+  1174→            );
+  1175→          })}
+  1176→        </div>
+  1177→      )}
+  1178→
+  1179→      {/* Create Report Dialog */}
+  1180→      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+  1181→        <DialogContent className="sm:max-w-md">
+  1182→          <DialogHeader>
+  1183→            <DialogTitle>Create Report</DialogTitle>
+  1184→            <DialogDescription>Choose a report type to generate for this project.</DialogDescription>
+  1185→          </DialogHeader>
+  1186→          <div className="grid gap-3 py-2">
+  1187→            {Object.entries(REPORT_TYPE_CONFIG).map(([key, cfg]) => (
+  1188→              <Card
+  1189→                key={key}
+  1190→                className="py-4 cursor-pointer hover:shadow-md hover:border-primary/30 transition-all"
+  1191→                onClick={() => handleCreate(cfg.label)}
+  1192→              >
+  1193→                <CardContent className="px-5 flex items-center gap-4">
+  1194→                  <div className="rounded-lg bg-muted p-3">
+  1195→                    {key === 'progress' && <FileBarChart className="size-5 text-violet-600" />}
+  1196→                    {key === 'before_after' && <ArrowRightLeft className="size-5 text-teal-600" />}
+  1197→                    {key === 'final' && <CheckCircle2 className="size-5 text-emerald-600" />}
+  1198→                    {key === 'incident' && <AlertTriangle className="size-5 text-red-600" />}
+  1199→                  </div>
+  1200→                  <div>
+  1201→                    <p className="font-medium text-sm">{cfg.label}</p>
+  1202→                    <p className="text-xs text-muted-foreground mt-0.5">
+  1203→                      {key === 'progress' && 'Track overall project progress with photos and data'}
+  1204→                      {key === 'before_after' && 'Side-by-side before and after photo comparison'}
+  1205→                      {key === 'final' && 'Comprehensive final report for project completion'}
+  1206→                      {key === 'incident' && 'Document issues, problems, or incidents on site'}
+  1207→                    </p>
+  1208→                  </div>
+  1209→                </CardContent>
+  1210→              </Card>
+  1211→            ))}
+  1212→          </div>
+  1213→        </DialogContent>
+  1214→      </Dialog>
+  1215→    </div>
+  1216→  );
+  1217→}
+  1218→
+  1219→// ═══════════════════════════════════════════════════════════════════
+  1220→//  SKELETON LOADER
+  1221→// ═══════════════════════════════════════════════════════════════════
+  1222→
+  1223→function ProjectDetailSkeleton() {
+  1224→  return (
+  1225→    <div className="min-h-screen bg-background">
+  1226→      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+  1227→        <div className="space-y-4">
+  1228→          <Skeleton className="h-8 w-24" />
+  1229→          <Skeleton className="h-8 w-80" />
+  1230→          <Skeleton className="h-4 w-64" />
+  1231→          <div className="flex gap-2">
+  1232→            <Skeleton className="h-8 w-20" />
+  1233→            <Skeleton className="h-8 w-20" />
+  1234→            <Skeleton className="h-8 w-20" />
+  1235→          </div>
+  1236→          <div className="space-y-1.5">
+  1237→            <Skeleton className="h-4 w-32" />
+  1238→            <Skeleton className="h-2.5 w-full" />
+  1239→          </div>
+  1240→        </div>
+  1241→        <Skeleton className="h-10 w-full max-w-lg" />
+  1242→        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+  1243→          {Array.from({ length: 8 }).map((_, i) => (
+  1244→            <Skeleton key={i} className="aspect-[4/3] rounded-lg" />
+  1245→          ))}
+  1246→        </div>
+  1247→      </div>
+  1248→    </div>
+  1249→  );
+  1250→}

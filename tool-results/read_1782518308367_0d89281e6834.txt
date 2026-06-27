@@ -1,0 +1,832 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useMemo, useCallback } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  List,
+     7→  LayoutGrid,
+     8→  Plus,
+     9→  Search,
+    10→  Filter,
+    11→  ChevronDown,
+    12→  ChevronRight,
+    13→  CheckCircle2,
+    14→  Circle,
+    15→  Clock,
+    16→  AlertTriangle,
+    17→  ArrowUpRight,
+    18→  MoreHorizontal,
+    19→  UserPlus,
+    20→  Flag,
+    21→  CalendarDays,
+    22→  X,
+    23→  Send,
+    24→  Image as ImageIcon,
+    25→  MessageSquare,
+    26→  Trash2,
+    27→  Edit3,
+    28→  ArrowUpDown,
+    29→} from 'lucide-react';
+    30→import { useAppStore, type Task, type Project, type ChecklistItem, type ActivityEntry, type User } from '@/store/app-store';
+    31→import { useToast } from '@/hooks/use-toast';
+    32→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+    33→import { Button } from '@/components/ui/button';
+    34→import { Input } from '@/components/ui/input';
+    35→import { Badge } from '@/components/ui/badge';
+    36→import { Checkbox } from '@/components/ui/checkbox';
+    37→import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+    38→import {
+    39→  Select,
+    40→  SelectContent,
+    41→  SelectItem,
+    42→  SelectTrigger,
+    43→  SelectValue,
+    44→} from '@/components/ui/select';
+    45→import {
+    46→  DropdownMenu,
+    47→  DropdownMenuContent,
+    48→  DropdownMenuItem,
+    49→  DropdownMenuSeparator,
+    50→  DropdownMenuTrigger,
+    51→} from '@/components/ui/dropdown-menu';
+    52→import {
+    53→  Table,
+    54→  TableBody,
+    55→  TableCell,
+    56→  TableHead,
+    57→  TableHeader,
+    58→  TableRow,
+    59→} from '@/components/ui/table';
+    60→import { Separator } from '@/components/ui/separator';
+    61→import { Skeleton } from '@/components/ui/skeleton';
+    62→import { ScrollArea } from '@/components/ui/scroll-area';
+    63→import {
+    64→  Dialog,
+    65→  DialogContent,
+    66→  DialogHeader,
+    67→  DialogTitle,
+    68→  DialogFooter,
+    69→  DialogDescription,
+    70→} from '@/components/ui/dialog';
+    71→import { Textarea } from '@/components/ui/textarea';
+    72→import { Label } from '@/components/ui/label';
+    73→import { cn } from '@/lib/utils';
+    74→
+    75→// --- Mock Data ---
+    76→const MOCK_PROJECTS: Project[] = [
+    77→  { id: 'p1', name: 'Riverside Villa Renovation', status: 'in_progress', priority: 'high', clientId: 'c1', clientName: 'John Smith', address: '123 River Rd', progress: 65, createdAt: '2025-01-15T10:00:00Z', updatedAt: '2025-06-20T14:30:00Z' },
+    78→  { id: 'p2', name: 'Downtown Office Fitout', status: 'in_progress', priority: 'medium', clientId: 'c2', clientName: 'Acme Corp', address: '456 Main St', progress: 40, createdAt: '2025-02-01T09:00:00Z', updatedAt: '2025-06-18T11:00:00Z' },
+    79→  { id: 'p3', name: 'Beach House Construction', status: 'planning', priority: 'low', clientId: 'c3', clientName: 'Sarah Wilson', address: '789 Coastal Ave', progress: 10, createdAt: '2025-03-10T08:00:00Z', updatedAt: '2025-06-15T16:00:00Z' },
+    80→  { id: 'p4', name: 'Park Avenue Loft', status: 'on_hold', priority: 'urgent', clientId: 'c4', clientName: 'Mike Johnson', address: '321 Park Ave', progress: 30, createdAt: '2025-01-20T12:00:00Z', updatedAt: '2025-06-10T09:00:00Z' },
+    81→];
+    82→
+    83→const MOCK_USERS: User[] = [
+    84→  { id: 'u1', name: 'Carlos Mendez', email: 'carlos@castalia.com', role: 'manager', avatar: '' },
+    85→  { id: 'u2', name: 'Ana Rodriguez', email: 'ana@castalia.com', role: 'worker', avatar: '' },
+    86→  { id: 'u3', name: 'Luis Fernandez', email: 'luis@castalia.com', role: 'worker', avatar: '' },
+    87→  { id: 'u4', name: 'Maria Garcia', email: 'maria@castalia.com', role: 'manager', avatar: '' },
+    88→  { id: 'u5', name: 'Diego Torres', email: 'diego@castalia.com', role: 'worker', avatar: '' },
+    89→];
+    90→
+    91→const MOCK_TASKS: Task[] = [
+    92→  {
+    93→    id: 't1', projectId: 'p1', title: 'Install kitchen cabinets', description: 'Install upper and lower cabinets in the main kitchen area. Ensure all units are level and properly secured to wall studs.',
+    94→    status: 'in_progress', priority: 'high', assigneeId: 'u2', assigneeName: 'Ana Rodriguez', assigneeAvatar: '',
+    95→    dueDate: '2025-07-05T00:00:00Z', evidencePhotoIds: ['ep1', 'ep2'],
+    96→    checklistItems: [
+    97→      { id: 'cl1', text: 'Measure cabinet layout', completed: true },
+    98→      { id: 'cl2', text: 'Install upper cabinets', completed: true },
+    99→      { id: 'cl3', text: 'Install lower cabinets', completed: false },
+   100→      { id: 'cl4', text: 'Adjust and level all units', completed: false },
+   101→    ],
+   102→    createdAt: '2025-06-10T10:00:00Z', updatedAt: '2025-06-20T14:30:00Z',
+   103→  },
+   104→  {
+   105→    id: 't2', projectId: 'p1', title: 'Electrical wiring - second floor', description: 'Run all electrical wiring for the second floor including outlets, switches, and light fixtures.',
+   106→    status: 'todo', priority: 'urgent', assigneeId: 'u3', assigneeName: 'Luis Fernandez', assigneeAvatar: '',
+   107→    dueDate: '2025-07-01T00:00:00Z', evidencePhotoIds: [],
+   108→    checklistItems: [
+   109→      { id: 'cl5', text: 'Plan wiring routes', completed: true },
+   110→      { id: 'cl6', text: 'Run conduit', completed: false },
+   111→      { id: 'cl7', text: 'Pull wires', completed: false },
+   112→      { id: 'cl8', text: 'Install outlet boxes', completed: false },
+   113→    ],
+   114→    createdAt: '2025-06-15T09:00:00Z', updatedAt: '2025-06-18T11:00:00Z',
+   115→  },
+   116→  {
+   117→    id: 't3', projectId: 'p2', title: 'Paint office walls', description: 'Apply two coats of premium paint to all office walls. Color: Pearl White.',
+   118→    status: 'review', priority: 'medium', assigneeId: 'u5', assigneeName: 'Diego Torres', assigneeAvatar: '',
+   119→    dueDate: '2025-06-28T00:00:00Z', evidencePhotoIds: ['ep3'],
+   120→    checklistItems: [
+   121→      { id: 'cl9', text: 'Prep walls (sand, patch)', completed: true },
+   122→      { id: 'cl10', text: 'Apply first coat', completed: true },
+   123→      { id: 'cl11', text: 'Apply second coat', completed: true },
+   124→    ],
+   125→    createdAt: '2025-06-05T08:00:00Z', updatedAt: '2025-06-22T10:00:00Z',
+   126→  },
+   127→  {
+   128→    id: 't4', projectId: 'p2', title: 'Install HVAC system', description: 'Full HVAC installation including ductwork and thermostat.',
+   129→    status: 'blocked', priority: 'high', assigneeId: 'u2', assigneeName: 'Ana Rodriguez', assigneeAvatar: '',
+   130→    dueDate: '2025-07-10T00:00:00Z', evidencePhotoIds: [],
+   131→    checklistItems: [
+   132→      { id: 'cl12', text: 'Install main unit', completed: true },
+   133→      { id: 'cl13', text: 'Run ductwork', completed: false },
+   134→      { id: 'cl14', text: 'Install vents', completed: false },
+   135→    ],
+   136→    createdAt: '2025-06-01T10:00:00Z', updatedAt: '2025-06-20T16:00:00Z',
+   137→  },
+   138→  {
+   139→    id: 't5', projectId: 'p1', title: 'Bathroom tile installation', description: 'Install ceramic tiles on bathroom floors and walls.',
+   140→    status: 'done', priority: 'medium', assigneeId: 'u3', assigneeName: 'Luis Fernandez', assigneeAvatar: '',
+   141→    dueDate: '2025-06-15T00:00:00Z', evidencePhotoIds: ['ep4', 'ep5'],
+   142→    checklistItems: [
+   143→      { id: 'cl15', text: 'Remove old tiles', completed: true },
+   144→      { id: 'cl16', text: 'Level subfloor', completed: true },
+   145→      { id: 'cl17', text: 'Lay floor tiles', completed: true },
+   146→      { id: 'cl18', text: 'Lay wall tiles', completed: true },
+   147→      { id: 'cl19', text: 'Grout and seal', completed: true },
+   148→    ],
+   149→    createdAt: '2025-05-20T09:00:00Z', updatedAt: '2025-06-14T17:00:00Z',
+   150→  },
+   151→  {
+   152→    id: 't6', projectId: 'p3', title: 'Foundation pouring', description: 'Pour concrete foundation for the beach house.',
+   153→    status: 'todo', priority: 'low', assigneeId: 'u5', assigneeName: 'Diego Torres', assigneeAvatar: '',
+   154→    dueDate: '2025-08-01T00:00:00Z', evidencePhotoIds: [],
+   155→    checklistItems: [
+   156→      { id: 'cl20', text: 'Excavation', completed: true },
+   157→      { id: 'cl21', text: 'Rebar installation', completed: false },
+   158→      { id: 'cl22', text: 'Pour concrete', completed: false },
+   159→    ],
+   160→    createdAt: '2025-06-18T10:00:00Z', updatedAt: '2025-06-18T10:00:00Z',
+   161→  },
+   162→  {
+   163→    id: 't7', projectId: 'p4', title: 'Window replacement', description: 'Replace all windows with energy-efficient double-glazed units.',
+   164→    status: 'in_progress', priority: 'high', assigneeId: 'u2', assigneeName: 'Ana Rodriguez', assigneeAvatar: '',
+   165→    dueDate: '2025-07-08T00:00:00Z', evidencePhotoIds: ['ep6'],
+   166→    checklistItems: [
+   167→      { id: 'cl23', text: 'Remove old windows', completed: true },
+   168→      { id: 'cl24', text: 'Install new frames', completed: true },
+   169→      { id: 'cl25', text: 'Glaze and seal', completed: false },
+   170→    ],
+   171→    createdAt: '2025-06-12T09:00:00Z', updatedAt: '2025-06-21T15:00:00Z',
+   172→  },
+   173→  {
+   174→    id: 't8', projectId: 'p2', title: 'Flooring installation - lobby', description: 'Install marble tile flooring in the main lobby area.',
+   175→    status: 'in_progress', priority: 'medium', assigneeId: 'u3', assigneeName: 'Luis Fernandez', assigneeAvatar: '',
+   176→    dueDate: '2025-07-12T00:00:00Z', evidencePhotoIds: [],
+   177→    checklistItems: [
+   178→      { id: 'cl26', text: 'Subfloor prep', completed: true },
+   179→      { id: 'cl27', text: 'Tile layout planning', completed: false },
+   180→      { id: 'cl28', text: 'Install tiles', completed: false },
+   181→      { id: 'cl29', text: 'Grout and polish', completed: false },
+   182→    ],
+   183→    createdAt: '2025-06-19T08:00:00Z', updatedAt: '2025-06-22T09:00:00Z',
+   184→  },
+   185→];
+   186→
+   187→const MOCK_ACTIVITY: ActivityEntry[] = [
+   188→  { id: 'a1', projectId: 'p1', userId: 'u1', userName: 'Carlos Mendez', action: 'changed status to in_progress', entityType: 'task', entityId: 't1', entityLabel: 'Install kitchen cabinets', createdAt: '2025-06-20T14:30:00Z' },
+   189→  { id: 'a2', projectId: 'p1', userId: 'u2', userName: 'Ana Rodriguez', action: 'completed checklist item', entityType: 'task', entityId: 't1', entityLabel: 'Install upper cabinets', createdAt: '2025-06-20T10:00:00Z' },
+   190→  { id: 'a3', projectId: 'p1', userId: 'u1', userName: 'Carlos Mendez', action: 'created task', entityType: 'task', entityId: 't2', entityLabel: 'Electrical wiring - second floor', createdAt: '2025-06-15T09:00:00Z' },
+   191→];
+   192→
+   193→const MOCK_EVIDENCE_PHOTOS = [
+   194→  { id: 'ep1', url: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=200&h=200&fit=crop', caption: 'Upper cabinets installed' },
+   195→  { id: 'ep2', url: 'https://images.unsplash.com/photo-1585128903994-9788298932a4?w=200&h=200&fit=crop', caption: 'Cabinet detail' },
+   196→  { id: 'ep3', url: 'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?w=200&h=200&fit=crop', caption: 'Painted wall' },
+   197→  { id: 'ep4', url: 'https://images.unsplash.com/photo-1552321554-5fefe8c9ef14?w=200&h=200&fit=crop', caption: 'Bathroom tiles' },
+   198→  { id: 'ep5', url: 'https://images.unsplash.com/photo-1620626011761-996317b8d101?w=200&h=200&fit=crop', caption: 'Tile pattern' },
+   199→  { id: 'ep6', url: 'https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=200&h=200&fit=crop', caption: 'New window frame' },
+   200→];
+   201→
+   202→// --- Helpers ---
+   203→const statusConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
+   204→  todo: { label: 'To Do', color: 'bg-slate-100 text-slate-700 border-slate-200', icon: Circle },
+   205→  in_progress: { label: 'In Progress', color: 'bg-amber-50 text-amber-700 border-amber-200', icon: Clock },
+   206→  review: { label: 'In Review', color: 'bg-purple-50 text-purple-700 border-purple-200', icon: ArrowUpRight },
+   207→  done: { label: 'Completed', color: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: CheckCircle2 },
+   208→  blocked: { label: 'Blocked', color: 'bg-red-50 text-red-700 border-red-200', icon: AlertTriangle },
+   209→};
+   210→
+   211→const priorityConfig: Record<string, { label: string; color: string }> = {
+   212→  low: { label: 'Low', color: 'bg-slate-100 text-slate-600' },
+   213→  medium: { label: 'Medium', color: 'bg-sky-50 text-sky-700' },
+   214→  high: { label: 'High', color: 'bg-orange-50 text-orange-700' },
+   215→  urgent: { label: 'Urgent', color: 'bg-red-50 text-red-700' },
+   216→};
+   217→
+   218→function formatDate(dateStr: string) {
+   219→  const d = new Date(dateStr);
+   220→  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+   221→}
+   222→
+   223→function isOverdue(dateStr: string, status: string) {
+   224→  if (status === 'done') return false;
+   225→  return new Date(dateStr) < new Date();
+   226→}
+   227→
+   228→function getInitials(name: string) {
+   229→  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+   230→}
+   231→
+   232→function getProjectName(projectId: string) {
+   233→  return MOCK_PROJECTS.find(p => p.id === projectId)?.name ?? 'Unknown Project';
+   234→}
+   235→
+   236→// --- Component ---
+   237→export default function TasksPage() {
+   238→  const { currentUser } = useAppStore();
+   239→  const { toast } = useToast();
+   240→
+   241→  const [tasks, setTasks] = useState<Task[]>([]);
+   242→  const [loading, setLoading] = useState(true);
+   243→  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+   244→  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+   245→  const [searchQuery, setSearchQuery] = useState('');
+   246→
+   247→  // Filters
+   248→  const [statusFilter, setStatusFilter] = useState<string>('all');
+   249→  const [projectFilter, setProjectFilter] = useState<string>('all');
+   250→  const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
+   251→  const [priorityFilter, setPriorityFilter] = useState<string>('all');
+   252→  const [dueDateSort, setDueDateSort] = useState<'asc' | 'desc' | 'none'>('none');
+   253→
+   254→  // Create task modal
+   255→  const [createModalOpen, setCreateModalOpen] = useState(false);
+   256→  const [newTask, setNewTask] = useState({ title: '', description: '', projectId: '', priority: 'medium' as Task['priority'], assigneeId: '', dueDate: '' });
+   257→
+   258→  // Simulate fetch
+   259→  useEffect(() => {
+   260→    const timer = setTimeout(() => {
+   261→      setTasks(MOCK_TASKS);
+   262→      setLoading(false);
+   263→    }, 600);
+   264→    return () => clearTimeout(timer);
+   265→  }, []);
+   266→
+   267→  // Set mock current user if none
+   268→  useEffect(() => {
+   269→    if (!currentUser) {
+   270→      useAppStore.getState().setCurrentUser(MOCK_USERS[0]);
+   271→    }
+   272→  }, [currentUser]);
+   273→
+   274→  const filteredTasks = useMemo(() => {
+   275→    let result = tasks.filter(t => {
+   276→      if (statusFilter !== 'all' && t.status !== statusFilter) return false;
+   277→      if (projectFilter !== 'all' && t.projectId !== projectFilter) return false;
+   278→      if (assigneeFilter !== 'all' && t.assigneeId !== assigneeFilter) return false;
+   279→      if (priorityFilter !== 'all' && t.priority !== priorityFilter) return false;
+   280→      if (searchQuery) {
+   281→        const q = searchQuery.toLowerCase();
+   282→        return t.title.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q) || getProjectName(t.projectId).toLowerCase().includes(q);
+   283→      }
+   284→      return true;
+   285→    });
+   286→
+   287→    if (dueDateSort !== 'none') {
+   288→      result = [...result].sort((a, b) => {
+   289→        const da = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+   290→        const db = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+   291→        return dueDateSort === 'asc' ? da - db : db - da;
+   292→      });
+   293→    }
+   294→    return result;
+   295→  }, [tasks, statusFilter, projectFilter, assigneeFilter, priorityFilter, dueDateSort, searchQuery]);
+   296→
+   297→  const counts = useMemo(() => ({
+   298→    total: tasks.length,
+   299→    todo: tasks.filter(t => t.status === 'todo').length,
+   300→    inProgress: tasks.filter(t => t.status === 'in_progress').length,
+   301→    done: tasks.filter(t => t.status === 'done').length,
+   302→  }), [tasks]);
+   303→
+   304→  const handleStatusChange = useCallback((taskId: string, newStatus: Task['status']) => {
+   305→    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus, updatedAt: new Date().toISOString() } : t));
+   306→    toast({ title: 'Task updated', description: `Status changed to ${statusConfig[newStatus].label}` });
+   307→  }, [toast]);
+   308→
+   309→  const handleCreateTask = useCallback(() => {
+   310→    if (!newTask.title.trim() || !newTask.projectId) {
+   311→      toast({ title: 'Missing fields', description: 'Please fill in title and project', variant: 'destructive' });
+   312→      return;
+   313→    }
+   314→    const task: Task = {
+   315→      id: `t${Date.now()}`,
+   316→      projectId: newTask.projectId,
+   317→      title: newTask.title,
+   318→      description: newTask.description || undefined,
+   319→      status: 'todo',
+   320→      priority: newTask.priority,
+   321→      assigneeId: newTask.assigneeId || undefined,
+   322→      assigneeName: newTask.assigneeId ? MOCK_USERS.find(u => u.id === newTask.assigneeId)?.name : undefined,
+   323→      dueDate: newTask.dueDate ? new Date(newTask.dueDate).toISOString() : undefined,
+   324→      checklistItems: [],
+   325→      evidencePhotoIds: [],
+   326→      createdAt: new Date().toISOString(),
+   327→      updatedAt: new Date().toISOString(),
+   328→    };
+   329→    setTasks(prev => [task, ...prev]);
+   330→    setCreateModalOpen(false);
+   331→    setNewTask({ title: '', description: '', projectId: '', priority: 'medium', assigneeId: '', dueDate: '' });
+   332→    toast({ title: 'Task created', description: `"${task.title}" has been created` });
+   333→  }, [newTask, toast]);
+   334→
+   335→  const handleToggleChecklist = useCallback((taskId: string, checklistId: string) => {
+   336→    setTasks(prev => prev.map(t => {
+   337→      if (t.id !== taskId) return t;
+   338→      return {
+   339→        ...t,
+   340→        checklistItems: t.checklistItems.map(ci => ci.id === checklistId ? { ...ci, completed: !ci.completed } : ci),
+   341→        updatedAt: new Date().toISOString(),
+   342→      };
+   343→    }));
+   344→  }, []);
+   345→
+   346→  const handleQuickAction = useCallback((action: string, task: Task) => {
+   347→    if (action === 'complete') handleStatusChange(task.id, 'done');
+   348→    else if (action === 'priority_up') {
+   349→      const order: Task['priority'][] = ['low', 'medium', 'high', 'urgent'];
+   350→      const idx = order.indexOf(task.priority);
+   351→      if (idx < order.length - 1) {
+   352→        const newP = order[idx + 1];
+   353→        setTasks(prev => prev.map(t => t.id === task.id ? { ...t, priority: newP } : t));
+   354→        toast({ title: 'Priority updated', description: `Set to ${priorityConfig[newP].label}` });
+   355→      }
+   356→    }
+   357→  }, [handleStatusChange, toast]);
+   358→
+   359→  const kanbanColumns = useMemo(() => {
+   360→    const columns: { key: Task['status']; label: string; tasks: Task[] }[] = [
+   361→      { key: 'todo', label: 'To Do', tasks: [] },
+   362→      { key: 'in_progress', label: 'In Progress', tasks: [] },
+   363→      { key: 'review', label: 'In Review', tasks: [] },
+   364→      { key: 'blocked', label: 'Blocked', tasks: [] },
+   365→      { key: 'done', label: 'Done', tasks: [] },
+   366→    ];
+   367→    filteredTasks.forEach(t => {
+   368→      const col = columns.find(c => c.key === t.status);
+   369→      if (col) col.tasks.push(t);
+   370→    });
+   371→    return columns;
+   372→  }, [filteredTasks]);
+   373→
+   374→  if (loading) {
+   375→    return (
+   376→      <div className="p-4 md:p-6 lg:p-8 space-y-6">
+   377→        <div className="flex items-center justify-between">
+   378→          <Skeleton className="h-8 w-32" />
+   379→          <Skeleton className="h-10 w-36" />
+   380→        </div>
+   381→        <div className="flex gap-3">
+   382→          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-9 w-36" />)}
+   383→        </div>
+   384→        <div className="space-y-3">
+   385→          {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}
+   386→        </div>
+   387→      </div>
+   388→    );
+   389→  }
+   390→
+   391→  return (
+   392→    <div className="p-4 md:p-6 lg:p-8 space-y-6 min-h-screen">
+   393→      {/* Header */}
+   394→      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+   395→        <div>
+   396→          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Tasks</h1>
+   397→          <div className="flex items-center gap-3 mt-2 flex-wrap">
+   398→            <Badge variant="outline" className="text-xs">{counts.total} Total</Badge>
+   399→            <Badge className={cn('text-xs', 'bg-slate-100 text-slate-700 border-slate-200')}>{counts.todo} Pending</Badge>
+   400→            <Badge className={cn('text-xs', 'bg-amber-50 text-amber-700 border-amber-200')}>{counts.inProgress} In Progress</Badge>
+   401→            <Badge className={cn('text-xs', 'bg-emerald-50 text-emerald-700 border-emerald-200')}>{counts.done} Completed</Badge>
+   402→          </div>
+   403→        </div>
+   404→        <Button onClick={() => setCreateModalOpen(true)} className="gap-2 shrink-0">
+   405→          <Plus className="h-4 w-4" /> Create Task
+   406→        </Button>
+   407→      </motion.div>
+   408→
+   409→      {/* Filter Bar */}
+   410→      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+   411→        <div className="relative flex-1 w-full sm:max-w-xs">
+   412→          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+   413→          <Input placeholder="Search tasks..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-9" />
+   414→        </div>
+   415→        <Select value={statusFilter} onValueChange={setStatusFilter}>
+   416→          <SelectTrigger className="w-full sm:w-[150px]"><SelectValue placeholder="Status" /></SelectTrigger>
+   417→          <SelectContent>
+   418→            <SelectItem value="all">All Statuses</SelectItem>
+   419→            <SelectItem value="todo">To Do</SelectItem>
+   420→            <SelectItem value="in_progress">In Progress</SelectItem>
+   421→            <SelectItem value="review">In Review</SelectItem>
+   422→            <SelectItem value="blocked">Blocked</SelectItem>
+   423→            <SelectItem value="done">Completed</SelectItem>
+   424→          </SelectContent>
+   425→        </Select>
+   426→        <Select value={projectFilter} onValueChange={setProjectFilter}>
+   427→          <SelectTrigger className="w-full sm:w-[200px]"><SelectValue placeholder="Project" /></SelectTrigger>
+   428→          <SelectContent>
+   429→            <SelectItem value="all">All Projects</SelectItem>
+   430→            {MOCK_PROJECTS.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+   431→          </SelectContent>
+   432→        </Select>
+   433→        <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+   434→          <SelectTrigger className="w-full sm:w-[170px]"><SelectValue placeholder="Assignee" /></SelectTrigger>
+   435→          <SelectContent>
+   436→            <SelectItem value="all">All Assignees</SelectItem>
+   437→            {MOCK_USERS.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+   438→          </SelectContent>
+   439→        </Select>
+   440→        <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+   441→          <SelectTrigger className="w-full sm:w-[140px]"><SelectValue placeholder="Priority" /></SelectTrigger>
+   442→          <SelectContent>
+   443→            <SelectItem value="all">All Priorities</SelectItem>
+   444→            <SelectItem value="low">Low</SelectItem>
+   445→            <SelectItem value="medium">Medium</SelectItem>
+   446→            <SelectItem value="high">High</SelectItem>
+   447→            <SelectItem value="urgent">Urgent</SelectItem>
+   448→          </SelectContent>
+   449→        </Select>
+   450→        <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={() => {
+   451→          const next = dueDateSort === 'none' ? 'asc' : dueDateSort === 'asc' ? 'desc' : 'none';
+   452→          setDueDateSort(next);
+   453→        }}>
+   454→          <ArrowUpDown className="h-3.5 w-3.5" /> Due Date {dueDateSort !== 'none' && (dueDateSort === 'asc' ? '↑' : '↓')}
+   455→        </Button>
+   456→      </motion.div>
+   457→
+   458→      {/* View Toggle */}
+   459→      <div className="flex items-center gap-2">
+   460→        <Button variant={viewMode === 'list' ? 'default' : 'outline'} size="sm" onClick={() => setViewMode('list')} className="gap-1.5">
+   461→          <List className="h-4 w-4" /> List
+   462→        </Button>
+   463→        <Button variant={viewMode === 'kanban' ? 'default' : 'outline'} size="sm" onClick={() => setViewMode('kanban')} className="gap-1.5">
+   464→          <LayoutGrid className="h-4 w-4" /> Kanban
+   465→        </Button>
+   466→        <span className="text-sm text-muted-foreground ml-2">{filteredTasks.length} tasks</span>
+   467→      </div>
+   468→
+   469→      {/* List View */}
+   470→      {viewMode === 'list' && (
+   471→        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+   472→          {/* Desktop Table */}
+   473→          <div className="hidden md:block rounded-lg border">
+   474→            <Table>
+   475→              <TableHeader>
+   476→                <TableRow className="bg-muted/30">
+   477→                  <TableHead className="w-[40%]">Task</TableHead>
+   478→                  <TableHead>Project</TableHead>
+   479→                  <TableHead>Assignee</TableHead>
+   480→                  <TableHead>Status</TableHead>
+   481→                  <TableHead>Priority</TableHead>
+   482→                  <TableHead>Due Date</TableHead>
+   483→                  <TableHead className="w-[60px]">Actions</TableHead>
+   484→                </TableRow>
+   485→              </TableHeader>
+   486→              <TableBody>
+   487→                <AnimatePresence>
+   488→                  {filteredTasks.map(task => {
+   489→                    const sc = statusConfig[task.status];
+   490→                    const pc = priorityConfig[task.priority];
+   491→                    const isExpanded = expandedTaskId === task.id;
+   492→                    const overdue = task.dueDate && isOverdue(task.dueDate, task.status);
+   493→                    return (
+   494→                      <React.Fragment key={task.id}>
+   495→                        <TableRow
+   496→                          className={cn('cursor-pointer transition-colors', isExpanded && 'bg-muted/50', overdue && 'bg-red-50/50')}
+   497→                          onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
+   498→                        >
+   499→                          <TableCell>
+   500→                            <div className="flex items-center gap-2">
+   501→                              {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
+   502→                              <span className={cn('font-medium', task.status === 'done' && 'line-through text-muted-foreground')}>{task.title}</span>
+   503→                              {task.checklistItems.length > 0 && (
+   504→                                <span className="text-xs text-muted-foreground ml-1">
+   505→                                  {task.checklistItems.filter(c => c.completed).length}/{task.checklistItems.length}
+   506→                                </span>
+   507→                              )}
+   508→                            </div>
+   509→                          </TableCell>
+   510→                          <TableCell className="text-muted-foreground text-sm">{getProjectName(task.projectId)}</TableCell>
+   511→                          <TableCell>
+   512→                            {task.assigneeName ? (
+   513→                              <div className="flex items-center gap-2">
+   514→                                <Avatar className="h-6 w-6"><AvatarFallback className="text-[10px]">{getInitials(task.assigneeName)}</AvatarFallback></Avatar>
+   515→                                <span className="text-sm">{task.assigneeName}</span>
+   516→                              </div>
+   517→                            ) : <span className="text-sm text-muted-foreground">Unassigned</span>}
+   518→                          </TableCell>
+   519→                          <TableCell>
+   520→                            <Badge variant="outline" className={cn('text-xs gap-1', sc.color)}>
+   521→                              <sc.icon className="h-3 w-3" /> {sc.label}
+   522→                            </Badge>
+   523→                          </TableCell>
+   524→                          <TableCell>
+   525→                            <span className={cn('text-xs font-medium px-2 py-0.5 rounded', pc.color)}>{pc.label}</span>
+   526→                          </TableCell>
+   527→                          <TableCell>
+   528→                            {task.dueDate ? (
+   529→                              <span className={cn('text-sm', overdue ? 'text-red-600 font-medium' : 'text-muted-foreground')}>
+   530→                                {formatDate(task.dueDate)} {overdue && '(Overdue)'}
+   531→                              </span>
+   532→                            ) : <span className="text-sm text-muted-foreground">—</span>}
+   533→                          </TableCell>
+   534→                          <TableCell>
+   535→                            <DropdownMenu>
+   536→                              <DropdownMenuTrigger asChild onClick={e => e.stopPropagation()}>
+   537→                                <Button variant="ghost" size="icon" className="h-8 w-8">
+   538→                                  <MoreHorizontal className="h-4 w-4" />
+   539→                                </Button>
+   540→                              </DropdownMenuTrigger>
+   541→                              <DropdownMenuContent align="end">
+   542→                                <DropdownMenuItem onClick={e => { e.stopPropagation(); handleStatusChange(task.id, 'done'); }}>
+   543→                                  <CheckCircle2 className="h-4 w-4 mr-2" /> Mark Complete
+   544→                                </DropdownMenuItem>
+   545→                                <DropdownMenuItem onClick={e => { e.stopPropagation(); handleQuickAction('priority_up', task); }}>
+   546→                                  <Flag className="h-4 w-4 mr-2" /> Increase Priority
+   547→                                </DropdownMenuItem>
+   548→                                <DropdownMenuSeparator />
+   549→                                <DropdownMenuItem onClick={e => e.stopPropagation()} className="text-destructive">
+   550→                                  <Trash2 className="h-4 w-4 mr-2" /> Delete
+   551→                                </DropdownMenuItem>
+   552→                              </DropdownMenuContent>
+   553→                            </DropdownMenu>
+   554→                          </TableCell>
+   555→                        </TableRow>
+   556→                        {/* Expanded Detail Row */}
+   557→                        <AnimatePresence>
+   558→                          {isExpanded && (
+   559→                            <TableRow className="bg-muted/30 border-t-0">
+   560→                              <TableCell colSpan={7} className="p-0">
+   561→                                <motion.div
+   562→                                  initial={{ height: 0, opacity: 0 }}
+   563→                                  animate={{ height: 'auto', opacity: 1 }}
+   564→                                  exit={{ height: 0, opacity: 0 }}
+   565→                                  transition={{ duration: 0.2 }}
+   566→                                  className="overflow-hidden"
+   567→                                >
+   568→                                  <TaskDetail task={task} onToggleChecklist={handleToggleChecklist} />
+   569→                                </motion.div>
+   570→                              </TableCell>
+   571→                            </TableRow>
+   572→                          )}
+   573→                        </AnimatePresence>
+   574→                      </React.Fragment>
+   575→                    );
+   576→                  })}
+   577→                </AnimatePresence>
+   578→              </TableBody>
+   579→            </Table>
+   580→          </div>
+   581→
+   582→          {/* Mobile Cards */}
+   583→          <div className="md:hidden space-y-3">
+   584→            <AnimatePresence>
+   585→              {filteredTasks.map(task => {
+   586→                const sc = statusConfig[task.status];
+   587→                const pc = priorityConfig[task.priority];
+   588→                const overdue = task.dueDate && isOverdue(task.dueDate, task.status);
+   589→                const isExpanded = expandedTaskId === task.id;
+   590→                return (
+   591→                  <motion.div key={task.id} layout>
+   592→                    <Card className="cursor-pointer" onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}>
+   593→                      <CardContent className="p-4">
+   594→                        <div className="flex items-start justify-between gap-2">
+   595→                          <div className="flex-1 min-w-0">
+   596→                            <div className="flex items-center gap-2 mb-1">
+   597→                              <Badge variant="outline" className={cn('text-[10px] gap-0.5', sc.color)}>
+   598→                                <sc.icon className="h-2.5 w-2.5" /> {sc.label}
+   599→                              </Badge>
+   600→                              <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded', pc.color)}>{pc.label}</span>
+   601→                            </div>
+   602→                            <p className={cn('font-medium text-sm', task.status === 'done' && 'line-through text-muted-foreground')}>{task.title}</p>
+   603→                            <p className="text-xs text-muted-foreground mt-0.5">{getProjectName(task.projectId)}</p>
+   604→                          </div>
+   605→                          {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 mt-1" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-1" />}
+   606→                        </div>
+   607→                        <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
+   608→                          <div className="flex items-center gap-1.5">
+   609→                            {task.assigneeName && (
+   610→                              <div className="flex items-center gap-1">
+   611→                                <Avatar className="h-4 w-4"><AvatarFallback className="text-[8px]">{getInitials(task.assigneeName)}</AvatarFallback></Avatar>
+   612→                                {task.assigneeName}
+   613→                              </div>
+   614→                            )}
+   615→                          </div>
+   616→                          {task.dueDate && <span className={overdue ? 'text-red-600 font-medium' : ''}>{formatDate(task.dueDate)}</span>}
+   617→                        </div>
+   618→                      </CardContent>
+   619→                      <AnimatePresence>
+   620→                        {isExpanded && (
+   621→                          <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
+   622→                            <CardContent className="pt-0 pb-4 px-4">
+   623→                              <TaskDetail task={task} onToggleChecklist={handleToggleChecklist} />
+   624→                            </CardContent>
+   625→                          </motion.div>
+   626→                        )}
+   627→                      </AnimatePresence>
+   628→                    </Card>
+   629→                  </motion.div>
+   630→                );
+   631→              })}
+   632→            </AnimatePresence>
+   633→          </div>
+   634→        </motion.div>
+   635→      )}
+   636→
+   637→      {/* Kanban View */}
+   638→      {viewMode === 'kanban' && (
+   639→        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 md:mx-0 md:px-0">
+   640→          {kanbanColumns.map(column => (
+   641→            <div key={column.key} className="min-w-[280px] w-[280px] shrink-0">
+   642→              <div className="flex items-center gap-2 mb-3">
+   643→                <Badge variant="outline" className={cn('text-xs gap-1', statusConfig[column.key].color)}>
+   644→                  <statusConfig[column.key].icon className="h-3 w-3" /> {column.label}
+   645→                </Badge>
+   646→                <span className="text-xs text-muted-foreground">{column.tasks.length}</span>
+   647→              </div>
+   648→              <div className="space-y-2">
+   649→                {column.tasks.map(task => {
+   650→                  const pc = priorityConfig[task.priority];
+   651→                  const overdue = task.dueDate && isOverdue(task.dueDate, task.status);
+   652→                  return (
+   653→                    <motion.div key={task.id} layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}>
+   654→                      <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setExpandedTaskId(expandedTaskId === task.id ? null : task.id)}>
+   655→                        <CardContent className="p-3 space-y-2">
+   656→                          <p className={cn('text-sm font-medium', task.status === 'done' && 'line-through text-muted-foreground')}>{task.title}</p>
+   657→                          <p className="text-xs text-muted-foreground truncate">{getProjectName(task.projectId)}</p>
+   658→                          <div className="flex items-center justify-between">
+   659→                            <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded', pc.color)}>{pc.label}</span>
+   660→                            {task.assigneeName && (
+   661→                              <Avatar className="h-5 w-5"><AvatarFallback className="text-[8px]">{getInitials(task.assigneeName)}</AvatarFallback></Avatar>
+   662→                            )}
+   663→                          </div>
+   664→                          {task.dueDate && (
+   665→                            <p className={cn('text-[11px]', overdue ? 'text-red-600 font-medium' : 'text-muted-foreground')}>
+   666→                              📅 {formatDate(task.dueDate)}
+   667→                            </p>
+   668→                          )}
+   669→                          {task.checklistItems.length > 0 && (
+   670→                            <div className="w-full bg-muted rounded-full h-1.5">
+   671→                              <div className="bg-primary rounded-full h-1.5 transition-all" style={{ width: `${(task.checklistItems.filter(c => c.completed).length / task.checklistItems.length) * 100}%` }} />
+   672→                            </div>
+   673→                          )}
+   674→                        </CardContent>
+   675→                      </Card>
+   676→                    </motion.div>
+   677→                  );
+   678→                })}
+   679→                {column.tasks.length === 0 && (
+   680→                  <div className="text-center text-sm text-muted-foreground py-8 border border-dashed rounded-lg">No tasks</div>
+   681→                )}
+   682→              </div>
+   683→            </div>
+   684→          ))}
+   685→        </motion.div>
+   686→      )}
+   687→
+   688→      {filteredTasks.length === 0 && (
+   689→        <div className="text-center py-16 text-muted-foreground">
+   690→          <Filter className="h-12 w-12 mx-auto mb-4 opacity-30" />
+   691→          <p className="text-lg font-medium">No tasks match your filters</p>
+   692→          <p className="text-sm mt-1">Try adjusting your filter criteria</p>
+   693→        </div>
+   694→      )}
+   695→
+   696→      {/* Create Task Modal */}
+   697→      <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+   698→        <DialogContent className="sm:max-w-lg">
+   699→          <DialogHeader>
+   700→            <DialogTitle>Create New Task</DialogTitle>
+   701→            <DialogDescription>Add a task to a project</DialogDescription>
+   702→          </DialogHeader>
+   703→          <div className="space-y-4">
+   704→            <div className="space-y-2">
+   705→              <Label>Title</Label>
+   706→              <Input placeholder="Task title" value={newTask.title} onChange={e => setNewTask(p => ({ ...p, title: e.target.value }))} />
+   707→            </div>
+   708→            <div className="space-y-2">
+   709→              <Label>Description</Label>
+   710→              <Textarea placeholder="Task description (optional)" value={newTask.description} onChange={e => setNewTask(p => ({ ...p, description: e.target.value }))} rows={3} />
+   711→            </div>
+   712→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   713→              <div className="space-y-2">
+   714→                <Label>Project</Label>
+   715→                <Select value={newTask.projectId} onValueChange={v => setNewTask(p => ({ ...p, projectId: v }))}>
+   716→                  <SelectTrigger className="w-full"><SelectValue placeholder="Select project" /></SelectTrigger>
+   717→                  <SelectContent>
+   718→                    {MOCK_PROJECTS.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+   719→                  </SelectContent>
+   720→                </Select>
+   721→              </div>
+   722→              <div className="space-y-2">
+   723→                <Label>Priority</Label>
+   724→                <Select value={newTask.priority} onValueChange={v => setNewTask(p => ({ ...p, priority: v as Task['priority'] }))}>
+   725→                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+   726→                  <SelectContent>
+   727→                    <SelectItem value="low">Low</SelectItem>
+   728→                    <SelectItem value="medium">Medium</SelectItem>
+   729→                    <SelectItem value="high">High</SelectItem>
+   730→                    <SelectItem value="urgent">Urgent</SelectItem>
+   731→                  </SelectContent>
+   732→                </Select>
+   733→              </div>
+   734→            </div>
+   735→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+   736→              <div className="space-y-2">
+   737→                <Label>Assignee</Label>
+   738→                <Select value={newTask.assigneeId} onValueChange={v => setNewTask(p => ({ ...p, assigneeId: v }))}>
+   739→                  <SelectTrigger className="w-full"><SelectValue placeholder="Unassigned" /></SelectTrigger>
+   740→                  <SelectContent>
+   741→                    {MOCK_USERS.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+   742→                  </SelectContent>
+   743→                </Select>
+   744→              </div>
+   745→              <div className="space-y-2">
+   746→                <Label>Due Date</Label>
+   747→                <Input type="date" value={newTask.dueDate} onChange={e => setNewTask(p => ({ ...p, dueDate: e.target.value }))} />
+   748→              </div>
+   749→            </div>
+   750→          </div>
+   751→          <DialogFooter>
+   752→            <Button variant="outline" onClick={() => setCreateModalOpen(false)}>Cancel</Button>
+   753→            <Button onClick={handleCreateTask}>Create Task</Button>
+   754→          </DialogFooter>
+   755→        </DialogContent>
+   756→      </Dialog>
+   757→    </div>
+   758→  );
+   759→}
+   760→
+   761→// --- Task Detail Sub-component ---
+   762→function TaskDetail({ task, onToggleChecklist }: { task: Task; onToggleChecklist: (taskId: string, checklistId: string) => void }) {
+   763→  const photos = MOCK_EVIDENCE_PHOTOS.filter(p => task.evidencePhotoIds.includes(p.id));
+   764→  const activity = MOCK_ACTIVITY.filter(a => a.entityId === task.id);
+   765→  const completedCount = task.checklistItems.filter(c => c.completed).length;
+   766→
+   767→  return (
+   768→    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-4">
+   769→      {/* Left: Description + Checklist */}
+   770→      <div className="lg:col-span-2 space-y-4">
+   771→        {task.description && (
+   772→          <div>
+   773→            <h4 className="text-sm font-semibold mb-1.5">Description</h4>
+   774→            <p className="text-sm text-muted-foreground leading-relaxed">{task.description}</p>
+   775→          </div>
+   776→        )}
+   777→
+   778→        {task.checklistItems.length > 0 && (
+   779→          <div>
+   780→            <h4 className="text-sm font-semibold mb-1.5">
+   781→              Checklist <span className="text-muted-foreground font-normal">({completedCount}/{task.checklistItems.length})</span>
+   782→            </h4>
+   783→            <div className="space-y-1.5">
+   784→              {task.checklistItems.map(ci => (
+   785→                <label key={ci.id} className="flex items-center gap-2.5 cursor-pointer group">
+   786→                  <Checkbox checked={ci.completed} onCheckedChange={() => onToggleChecklist(task.id, ci.id)} />
+   787→                  <span className={cn('text-sm', ci.completed && 'line-through text-muted-foreground')}>{ci.text}</span>
+   788→                </label>
+   789→              ))}
+   790→            </div>
+   791→          </div>
+   792→        )}
+   793→
+   794→        {photos.length > 0 && (
+   795→          <div>
+   796→            <h4 className="text-sm font-semibold mb-1.5">Evidence Photos</h4>
+   797→            <div className="flex gap-2 flex-wrap">
+   798→              {photos.map(p => (
+   799→                <div key={p.id} className="relative w-20 h-20 rounded-lg overflow-hidden border group">
+   800→                  <img src={p.url} alt={p.caption || 'Evidence'} className="w-full h-full object-cover" />
+   801→                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+   802→                    <ImageIcon className="h-4 w-4 text-white" />
+   803→                  </div>
+   804→                </div>
+   805→              ))}
+   806→            </div>
+   807→          </div>
+   808→        )}
+   809→      </div>
+   810→
+   811→      {/* Right: Activity */}
+   812→      <div>
+   813→        <h4 className="text-sm font-semibold mb-1.5">Activity</h4>
+   814→        {activity.length > 0 ? (
+   815→          <div className="space-y-3">
+   816→            {activity.map(a => (
+   817→              <div key={a.id} className="flex gap-2.5">
+   818→                <Avatar className="h-6 w-6 shrink-0 mt-0.5"><AvatarFallback className="text-[9px]">{getInitials(a.userName)}</AvatarFallback></Avatar>
+   819→                <div className="min-w-0">
+   820→                  <p className="text-xs"><span className="font-medium">{a.userName}</span> {a.action}</p>
+   821→                  <p className="text-[11px] text-muted-foreground">{formatDate(a.createdAt)}</p>
+   822→                </div>
+   823→              </div>
+   824→            ))}
+   825→          </div>
+   826→        ) : (
+   827→          <p className="text-xs text-muted-foreground">No recent activity</p>
+   828→        )}
+   829→      </div>
+   830→    </div>
+   831→  );
+   832→}

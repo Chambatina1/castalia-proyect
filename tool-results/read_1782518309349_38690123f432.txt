@@ -1,0 +1,564 @@
+     1→'use client';
+     2→
+     3→import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import {
+     6→  Hash,
+     7→  Send,
+     8→  Paperclip,
+     9→  AtSign,
+    10→  Image as ImageIcon,
+    11→  FileText,
+    12→  Lock,
+    13→  Globe,
+    14→  Menu,
+    15→  X,
+    16→  ChevronLeft,
+    17→  MessageSquare,
+    18→  Users,
+    19→} from 'lucide-react';
+    20→import { useAppStore, type ChatMessage, type User, type Project } from '@/store/app-store';
+    21→import { useToast } from '@/hooks/use-toast';
+    22→import { Button } from '@/components/ui/button';
+    23→import { Input } from '@/components/ui/input';
+    24→import { Badge } from '@/components/ui/badge';
+    25→import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+    26→import { Switch } from '@/components/ui/switch';
+    27→import { Label } from '@/components/ui/label';
+    28→import { Separator } from '@/components/ui/separator';
+    29→import { ScrollArea } from '@/components/ui/scroll-area';
+    30→import { Skeleton } from '@/components/ui/skeleton';
+    31→import { cn } from '@/lib/utils';
+    32→
+    33→// --- Mock Data ---
+    34→const MOCK_USERS: User[] = [
+    35→  { id: 'u1', name: 'Carlos Mendez', email: 'carlos@castalia.com', role: 'manager', avatar: '' },
+    36→  { id: 'u2', name: 'Ana Rodriguez', email: 'ana@castalia.com', role: 'worker', avatar: '' },
+    37→  { id: 'u3', name: 'Luis Fernandez', email: 'luis@castalia.com', role: 'worker', avatar: '' },
+    38→  { id: 'u4', name: 'Maria Garcia', email: 'maria@castalia.com', role: 'manager', avatar: '' },
+    39→];
+    40→
+    41→const MOCK_PROJECTS: Project[] = [
+    42→  { id: 'p1', name: 'Riverside Villa Renovation', status: 'in_progress', priority: 'high', clientId: 'c1', clientName: 'John Smith', address: '123 River Rd', progress: 65, createdAt: '2025-01-15T10:00:00Z', updatedAt: '2025-06-20T14:30:00Z' },
+    43→  { id: 'p2', name: 'Downtown Office Fitout', status: 'in_progress', priority: 'medium', clientId: 'c2', clientName: 'Acme Corp', address: '456 Main St', progress: 40, createdAt: '2025-02-01T09:00:00Z', updatedAt: '2025-06-18T11:00:00Z' },
+    44→  { id: 'p3', name: 'Beach House Construction', status: 'planning', priority: 'low', clientId: 'c3', clientName: 'Sarah Wilson', address: '789 Coastal Ave', progress: 10, createdAt: '2025-03-10T08:00:00Z', updatedAt: '2025-06-15T16:00:00Z' },
+    45→];
+    46→
+    47→const MOCK_GENERAL_MESSAGES: ChatMessage[] = [
+    48→  { id: 'm1', projectId: '', senderId: 'u1', senderName: 'Carlos Mendez', senderAvatar: '', content: 'Good morning team! Let\'s sync up on all active projects today.', isInternal: false, createdAt: '2025-06-20T09:00:00Z' },
+    49→  { id: 'm2', projectId: '', senderId: 'u4', senderName: 'Maria Garcia', senderAvatar: '', content: 'Sounds good. I\'ll prepare the weekly summary for each project.', isInternal: false, createdAt: '2025-06-20T09:02:00Z' },
+    50→  { id: 'm3', projectId: '', senderId: 'u1', senderName: 'Carlos Mendez', senderAvatar: '', content: '@Maria Garcia great, please also check on the materials delivery for the Riverside project. We need the tiles by Thursday.', isInternal: false, createdAt: '2025-06-20T09:05:00Z' },
+    51→  { id: 'm4', projectId: '', senderId: 'u4', senderName: 'Maria Garcia', senderAvatar: '', content: 'Already on it! I spoke with the supplier yesterday and they confirmed delivery for Wednesday.', isInternal: false, createdAt: '2025-06-20T09:08:00Z' },
+    52→  { id: 'm5', projectId: '', senderId: 'u1', senderName: 'Carlos Mendez', senderAvatar: '', content: 'Internal note: The client budget for Beach House is looking tight. We may need to renegotiate the scope.', isInternal: true, createdAt: '2025-06-20T09:15:00Z' },
+    53→  { id: 'm6', projectId: '', senderId: 'u4', senderName: 'Maria Garcia', senderAvatar: '', content: 'Understood. I\'ll draft a revised estimate with alternative materials.', isInternal: true, createdAt: '2025-06-20T09:18:00Z' },
+    54→  { id: 'm7', projectId: '', senderId: 'u2', senderName: 'Ana Rodriguez', senderAvatar: '', content: 'Quick update from the field: the kitchen cabinets are 60% installed. Should be done by end of day tomorrow.', isInternal: false, createdAt: '2025-06-20T10:30:00Z' },
+    55→  { id: 'm8', projectId: '', senderId: 'u3', senderName: 'Luis Fernandez', senderAvatar: '', content: 'Great progress! I\'ve uploaded the electrical wiring plan for the second floor. Can someone review?', isInternal: false, createdAt: '2025-06-20T11:00:00Z' },
+    56→  { id: 'm9', projectId: '', senderId: 'u1', senderName: 'Carlos Mendez', senderAvatar: '', content: '@Luis Fernandez will review it this afternoon. Nice work getting that done quickly.', isInternal: false, createdAt: '2025-06-20T11:05:00Z' },
+    57→];
+    58→
+    59→const MOCK_PROJECT_MESSAGES: Record<string, ChatMessage[]> = {
+    60→  p1: [
+    61→    { id: 'pm1', projectId: 'p1', senderId: 'u2', senderName: 'Ana Rodriguez', senderAvatar: '', content: 'The upper cabinets are installed! Here\'s a photo:', isInternal: false, createdAt: '2025-06-20T14:00:00Z' },
+    62→    { id: 'pm2', projectId: 'p1', senderId: 'u2', senderName: 'Ana Rodriguez', senderAvatar: '', content: '[IMAGE: kitchen-cabinets-progress.jpg]', isInternal: false, createdAt: '2025-06-20T14:00:30Z' },
+    63→    { id: 'pm3', projectId: 'p1', senderId: 'u1', senderName: 'Carlos Mendez', senderAvatar: '', content: 'Looks great @Ana Rodriguez! Make sure the alignment is within 2mm tolerance.', isInternal: false, createdAt: '2025-06-20T14:15:00Z' },
+    64→    { id: 'pm4', projectId: 'p1', senderId: 'u2', senderName: 'Ana Rodriguez', senderAvatar: '', content: 'Checked and confirmed. All units are level. Moving to lower cabinets now.', isInternal: false, createdAt: '2025-06-20T14:30:00Z' },
+    65→    { id: 'pm5', projectId: 'p1', senderId: 'u1', senderName: 'Carlos Mendez', senderAvatar: '', content: 'Note: Client wants to change the countertop material. I\'ll negotiate the cost difference.', isInternal: true, createdAt: '2025-06-20T14:35:00Z' },
+    66→    { id: 'pm6', projectId: 'p1', senderId: 'u3', senderName: 'Luis Fernandez', senderAvatar: '', content: 'I\'ve started on the electrical for the second floor. Will need the wiring plan approved first.', isInternal: false, createdAt: '2025-06-20T15:00:00Z' },
+    67→  ],
+    68→  p2: [
+    69→    { id: 'pm7', projectId: 'p2', senderId: 'u5', senderName: 'Diego Torres', senderAvatar: '', content: 'First coat of paint is done in the main office area. Attaching progress photos.', isInternal: false, createdAt: '2025-06-20T10:00:00Z' },
+    70→    { id: 'pm8', projectId: 'p2', senderId: 'u5', senderName: 'Diego Torres', senderAvatar: '', content: '[IMAGE: office-paint-first-coat.jpg]', isInternal: false, createdAt: '2025-06-20T10:00:30Z' },
+    71→    { id: 'pm9', projectId: 'p2', senderId: 'u4', senderName: 'Maria Garcia', senderAvatar: '', content: 'Looks good! The client mentioned they might want an accent wall. Let me confirm.', isInternal: false, createdAt: '2025-06-20T10:30:00Z' },
+    72→  ],
+    73→  p3: [
+    74→    { id: 'pm10', projectId: 'p3', senderId: 'u1', senderName: 'Carlos Mendez', senderAvatar: '', content: 'Beach house project kickoff meeting scheduled for next Monday.', isInternal: false, createdAt: '2025-06-19T16:00:00Z' },
+    75→  ],
+    76→};
+    77→
+    78→// --- Helpers ---
+    79→function getInitials(name: string) {
+    80→  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    81→}
+    82→
+    83→function formatTime(dateStr: string) {
+    84→  const d = new Date(dateStr);
+    85→  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    86→}
+    87→
+    88→function formatDate(dateStr: string) {
+    89→  const d = new Date(dateStr);
+    90→  const today = new Date();
+    91→  const isToday = d.toDateString() === today.toDateString();
+    92→  if (isToday) return 'Today';
+    93→  const yesterday = new Date(today);
+    94→  yesterday.setDate(yesterday.getDate() - 1);
+    95→  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    96→  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    97→}
+    98→
+    99→function renderMentionedContent(content: string) {
+   100→  const parts = content.split(/(@\w[\w\s]*\w|@\w+)/g);
+   101→  return parts.map((part, i) => {
+   102→    if (part.startsWith('@')) {
+   103→      return (
+   104→        <span key={i} className="bg-primary/10 text-primary font-semibold px-1 rounded">
+   105→          {part}
+   106→        </span>
+   107→      );
+   108→    }
+   109→    return part;
+   110→  });
+   111→}
+   112→
+   113→function isImageMessage(content: string) {
+   114→  return content.startsWith('[IMAGE:');
+   115→}
+   116→
+   117→function extractImageName(content: string) {
+   118→  const match = content.match(/\[IMAGE:\s*(.+)\]/);
+   119→  return match ? match[1] : 'image.jpg';
+   120→}
+   121→
+   122→// --- Channel type ---
+   123→interface ChatChannel {
+   124→  id: string; // '' for general, projectId for project
+   125→  name: string;
+   126→  lastMessage: string;
+   127→  lastMessageTime: string;
+   128→  unreadCount: number;
+   129→  isProject: boolean;
+   130→}
+   131→
+   132→// --- Component ---
+   133→export default function ChatPage() {
+   134→  const { currentUser } = useAppStore();
+   135→  const { toast } = useToast();
+   136→
+   137→  const [channels, setChannels] = useState<ChatChannel[]>([]);
+   138→  const [activeChannelId, setActiveChannelId] = useState<string>('');
+   139→  const [messages, setMessages] = useState<ChatMessage[]>([]);
+   140→  const [messageInput, setMessageInput] = useState('');
+   141→  const [isInternal, setIsInternal] = useState(false);
+   142→  const [showMentionPicker, setShowMentionPicker] = useState(false);
+   143→  const [loading, setLoading] = useState(true);
+   144→  const [sidebarOpen, setSidebarOpen] = useState(false);
+   145→
+   146→  const messagesEndRef = useRef<HTMLDivElement>(null);
+   147→  const inputRef = useRef<HTMLTextAreaElement>(null);
+   148→
+   149→  // Set mock user
+   150→  useEffect(() => {
+   151→    if (!currentUser) {
+   152→      useAppStore.getState().setCurrentUser(MOCK_USERS[0]);
+   153→    }
+   154→  }, [currentUser]);
+   155→
+   156→  // Simulate loading
+   157→  useEffect(() => {
+   158→    const timer = setTimeout(() => {
+   159→      const chs: ChatChannel[] = [
+   160→        { id: '', name: 'General Chat', lastMessage: MOCK_GENERAL_MESSAGES[MOCK_GENERAL_MESSAGES.length - 1]?.content || '', lastMessageTime: MOCK_GENERAL_MESSAGES[MOCK_GENERAL_MESSAGES.length - 1]?.createdAt || '', unreadCount: 2, isProject: false },
+   161→        ...MOCK_PROJECTS.map(p => {
+   162→          const msgs = MOCK_PROJECT_MESSAGES[p.id] || [];
+   163→          const lastMsg = msgs[msgs.length - 1];
+   164→          return {
+   165→            id: p.id,
+   166→            name: p.name,
+   167→            lastMessage: lastMsg?.content || 'No messages yet',
+   168→            lastMessageTime: lastMsg?.createdAt || p.updatedAt,
+   169→            unreadCount: p.id === 'p1' ? 3 : 0,
+   170→            isProject: true,
+   171→          };
+   172→        }),
+   173→      ];
+   174→      setChannels(chs);
+   175→      setMessages(MOCK_GENERAL_MESSAGES);
+   176→      setLoading(false);
+   177→    }, 500);
+   178→    return () => clearTimeout(timer);
+   179→  }, []);
+   180→
+   181→  // Auto-scroll on new messages
+   182→  useEffect(() => {
+   183→    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+   184→  }, [messages]);
+   185→
+   186→  // Switch channel
+   187→  const handleChannelSwitch = useCallback((channelId: string) => {
+   188→    setActiveChannelId(channelId);
+   189→    setSidebarOpen(false);
+   190→    if (channelId === '') {
+   191→      setMessages(MOCK_GENERAL_MESSAGES);
+   192→    } else {
+   193→      setMessages(MOCK_PROJECT_MESSAGES[channelId] || []);
+   194→    }
+   195→  }, []);
+   196→
+   197→  // Send message
+   198→  const handleSend = useCallback(() => {
+   199→    if (!messageInput.trim()) return;
+   200→    const user = useAppStore.getState().currentUser || MOCK_USERS[0];
+   201→    const newMsg: ChatMessage = {
+   202→      id: `m${Date.now()}`,
+   203→      projectId: activeChannelId,
+   204→      senderId: user.id,
+   205→      senderName: user.name,
+   206→      senderAvatar: user.avatar,
+   207→      content: messageInput.trim(),
+   208→      isInternal,
+   209→      createdAt: new Date().toISOString(),
+   210→    };
+   211→    setMessages(prev => [...prev, newMsg]);
+   212→    setMessageInput('');
+   213→    setShowMentionPicker(false);
+   214→  }, [messageInput, activeChannelId, isInternal]);
+   215→
+   216→  // Keyboard send
+   217→  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+   218→    if (e.key === 'Enter' && !e.shiftKey) {
+   219→      e.preventDefault();
+   220→      handleSend();
+   221→    }
+   222→  }, [handleSend]);
+   223→
+   224→  // Insert mention
+   225→  const handleMention = useCallback((userName: string) => {
+   226→    const mention = `@${userName.split(' ')[0]}`;
+   227→    setMessageInput(prev => prev + (prev && !prev.endsWith(' ') ? ' ' : '') + mention + ' ');
+   228→    setShowMentionPicker(false);
+   229→    inputRef.current?.focus();
+   230→  }, []);
+   231→
+   232→  // Simulate file attach
+   233→  const handleAttach = useCallback(() => {
+   234→    toast({ title: 'File attachment', description: 'File picker would open here. Feature available in production.' });
+   235→  }, [toast]);
+   236→
+   237→  // Group messages by date
+   238→  const groupedMessages = useMemo(() => {
+   239→    const groups: { date: string; messages: ChatMessage[] }[] = [];
+   240→    let currentDate = '';
+   241→    messages.forEach(msg => {
+   242→      const date = formatDate(msg.createdAt);
+   243→      if (date !== currentDate) {
+   244→        currentDate = date;
+   245→        groups.push({ date, messages: [msg] });
+   246→      } else {
+   247→        groups[groups.length - 1].messages.push(msg);
+   248→      }
+   249→    });
+   250→    return groups;
+   251→  }, [messages]);
+   252→
+   253→  if (loading) {
+   254→    return (
+   255→      <div className="flex h-[calc(100vh-4rem)]">
+   256→        <div className="w-72 border-r p-4 space-y-3 hidden md:block">
+   257→          <Skeleton className="h-8 w-40" />
+   258→          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)}
+   259→        </div>
+   260→        <div className="flex-1 p-4 space-y-4">
+   261→          <Skeleton className="h-12 w-3/4" />
+   262→          <div className="flex justify-end"><Skeleton className="h-16 w-64 rounded-2xl rounded-br-md" /></div>
+   263→          <div className="flex justify-start"><Skeleton className="h-16 w-72 rounded-2xl rounded-bl-md" /></div>
+   264→          <div className="flex justify-end"><Skeleton className="h-12 w-48 rounded-2xl rounded-br-md" /></div>
+   265→        </div>
+   266→      </div>
+   267→    );
+   268→  }
+   269→
+   270→  const activeChannel = channels.find(c => c.id === activeChannelId);
+   271→  const currentUserId = currentUser?.id || 'u1';
+   272→
+   273→  return (
+   274→    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
+   275→      {/* Mobile sidebar overlay */}
+   276→      <AnimatePresence>
+   277→        {sidebarOpen && (
+   278→          <motion.div
+   279→            initial={{ opacity: 0 }}
+   280→            animate={{ opacity: 1 }}
+   281→            exit={{ opacity: 0 }}
+   282→            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+   283→            onClick={() => setSidebarOpen(false)}
+   284→          />
+   285→        )}
+   286→      </AnimatePresence>
+   287→
+   288→      {/* Sidebar - Channels */}
+   289→      <aside className={cn(
+   290→        'w-72 border-r bg-card flex flex-col shrink-0 z-50',
+   291→        'fixed md:relative inset-y-0 left-0 md:inset-auto',
+   292→        'transition-transform duration-200',
+   293→        sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+   294→      )}>
+   295→        <div className="p-4 border-b">
+   296→          <div className="flex items-center justify-between">
+   297→            <h2 className="font-semibold text-lg">Channels</h2>
+   298→            <Button variant="ghost" size="icon" className="h-8 w-8 md:hidden" onClick={() => setSidebarOpen(false)}>
+   299→              <X className="h-4 w-4" />
+   300→            </Button>
+   301→          </div>
+   302→        </div>
+   303→        <ScrollArea className="flex-1">
+   304→          <div className="p-2 space-y-1">
+   305→            {/* General Channel */}
+   306→            <button
+   307→              onClick={() => handleChannelSwitch('')}
+   308→              className={cn(
+   309→                'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors',
+   310→                activeChannelId === '' ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+   311→              )}
+   312→            >
+   313→              <div className={cn('h-9 w-9 rounded-lg flex items-center justify-center shrink-0',
+   314→                activeChannelId === '' ? 'bg-primary text-primary-foreground' : 'bg-muted'
+   315→              )}>
+   316→                <MessageSquare className="h-4 w-4" />
+   317→              </div>
+   318→              <div className="flex-1 min-w-0">
+   319→                <p className="text-sm font-medium truncate">General Chat</p>
+   320→                <p className="text-xs text-muted-foreground truncate">{channels[0]?.lastMessage?.slice(0, 40) || ''}</p>
+   321→              </div>
+   322→              {channels[0]?.unreadCount > 0 && activeChannelId !== '' && (
+   323→                <Badge className="h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
+   324→                  {channels[0].unreadCount}
+   325→                </Badge>
+   326→              )}
+   327→            </button>
+   328→
+   329→            <div className="px-3 pt-4 pb-2">
+   330→              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Project Channels</p>
+   331→            </div>
+   332→
+   333→            {channels.filter(c => c.isProject).map(channel => (
+   334→              <button
+   335→                key={channel.id}
+   336→                onClick={() => handleChannelSwitch(channel.id)}
+   337→                className={cn(
+   338→                  'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors',
+   339→                  activeChannelId === channel.id ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+   340→                )}
+   341→              >
+   342→                <div className={cn('h-9 w-9 rounded-lg flex items-center justify-center shrink-0',
+   343→                  activeChannelId === channel.id ? 'bg-primary text-primary-foreground' : 'bg-muted'
+   344→                )}>
+   345→                  <Hash className="h-4 w-4" />
+   346→                </div>
+   347→                <div className="flex-1 min-w-0">
+   348→                  <p className="text-sm font-medium truncate">{channel.name}</p>
+   349→                  <p className="text-xs text-muted-foreground truncate">{channel.lastMessage.slice(0, 40)}</p>
+   350→                </div>
+   351→                {channel.unreadCount > 0 && activeChannelId !== channel.id && (
+   352→                  <Badge className="h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]">
+   353→                    {channel.unreadCount}
+   354→                  </Badge>
+   355→                )}
+   356→              </button>
+   357→            ))}
+   358→          </div>
+   359→        </ScrollArea>
+   360→      </aside>
+   361→
+   362→      {/* Main Chat Area */}
+   363→      <main className="flex-1 flex flex-col min-w-0">
+   364→        {/* Chat Header */}
+   365→        <header className="h-14 border-b flex items-center justify-between px-4 shrink-0">
+   366→          <div className="flex items-center gap-3">
+   367→            <Button variant="ghost" size="icon" className="h-8 w-8 md:hidden" onClick={() => setSidebarOpen(true)}>
+   368→              <Menu className="h-4 w-4" />
+   369→            </Button>
+   370→            <div>
+   371→              <h3 className="font-semibold text-sm">
+   372→                {activeChannelId === '' ? 'General Chat' : activeChannel?.name || 'Chat'}
+   373→              </h3>
+   374→              <p className="text-xs text-muted-foreground">
+   375→                {activeChannelId === '' ? 'All team members' : `Project channel`}
+   376→              </p>
+   377→            </div>
+   378→          </div>
+   379→          {currentUser?.role === 'manager' && (
+   380→            <div className="flex items-center gap-2">
+   381→              <Label htmlFor="internal-toggle" className="text-xs text-muted-foreground cursor-pointer hidden sm:inline-flex items-center gap-1.5">
+   382→                {isInternal ? <Lock className="h-3 w-3" /> : <Globe className="h-3 w-3" />}
+   383→                Internal Only
+   384→              </Label>
+   385→              <Switch
+   386→                id="internal-toggle"
+   387→                checked={isInternal}
+   388→                onCheckedChange={setIsInternal}
+   389→                className="scale-75"
+   390→              />
+   391→            </div>
+   392→          )}
+   393→        </header>
+   394→
+   395→        {/* Messages */}
+   396→        <ScrollArea className="flex-1">
+   397→          <div className="p-4 space-y-6">
+   398→            {groupedMessages.map(group => (
+   399→              <div key={group.date}>
+   400→                <div className="flex items-center gap-3 my-4">
+   401→                  <Separator className="flex-1" />
+   402→                  <span className="text-xs text-muted-foreground font-medium px-2">{group.date}</span>
+   403→                  <Separator className="flex-1" />
+   404→                </div>
+   405→                <div className="space-y-3">
+   406→                  {group.messages.map((msg, idx) => {
+   407→                    const isMine = msg.senderId === currentUserId;
+   408→                    const showAvatar = idx === 0 || group.messages[idx - 1].senderId !== msg.senderId;
+   409→
+   410→                    return (
+   411→                      <motion.div
+   412→                        key={msg.id}
+   413→                        initial={{ opacity: 0, y: 5 }}
+   414→                        animate={{ opacity: 1, y: 0 }}
+   415→                        transition={{ duration: 0.15 }}
+   416→                        className={cn('flex gap-2.5', isMine ? 'flex-row-reverse' : 'flex-row')}
+   417→                      >
+   418→                        {/* Avatar */}
+   419→                        {showAvatar ? (
+   420→                          <Avatar className={cn('h-8 w-8 shrink-0 mt-1', isMine && 'order-2')}>
+   421→                            <AvatarFallback className="text-xs">{getInitials(msg.senderName)}</AvatarFallback>
+   422→                          </Avatar>
+   423→                        ) : (
+   424→                          <div className="w-8 shrink-0" />
+   425→                        )}
+   426→
+   427→                        <div className={cn('flex flex-col', isMine ? 'items-end max-w-[75%]' : 'items-start max-w-[75%]')}>
+   428→                          {/* Name + Time */}
+   429→                          {showAvatar && (
+   430→                            <div className={cn('flex items-center gap-2 mb-1', isMine && 'flex-row-reverse')}>
+   431→                              <span className="text-xs font-semibold">{msg.senderName}</span>
+   432→                              <span className="text-[11px] text-muted-foreground">{formatTime(msg.createdAt)}</span>
+   433→                              {msg.isInternal && (
+   434→                                <Badge variant="outline" className="h-4 text-[10px] gap-0.5 text-amber-600 border-amber-200 bg-amber-50">
+   435→                                  <Lock className="h-2.5 w-2.5" /> Internal
+   436→                                </Badge>
+   437→                              )}
+   438→                            </div>
+   439→                          )}
+   440→
+   441→                          {/* Message Bubble */}
+   442→                          <div
+   443→                            className={cn(
+   444→                              'rounded-2xl px-4 py-2.5 text-sm leading-relaxed',
+   445→                              isMine
+   446→                                ? 'bg-primary text-primary-foreground rounded-br-md'
+   447→                                : msg.isInternal
+   448→                                  ? 'bg-amber-50 border border-amber-200 text-amber-900 rounded-bl-md'
+   449→                                  : 'bg-muted rounded-bl-md'
+   450→                            )}
+   451→                          >
+   452→                            {isImageMessage(msg.content) ? (
+   453→                              <div className="space-y-2">
+   454→                                <div className="w-48 h-32 rounded-lg overflow-hidden bg-muted">
+   455→                                  <img
+   456→                                    src="https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=400&h=300&fit=crop"
+   457→                                    alt={extractImageName(msg.content)}
+   458→                                    className="w-full h-full object-cover"
+   459→                                  />
+   460→                                </div>
+   461→                                <p className="text-xs opacity-70">{extractImageName(msg.content)}</p>
+   462→                              </div>
+   463→                            ) : (
+   464→                              renderMentionedContent(msg.content)
+   465→                            )}
+   466→                          </div>
+   467→
+   468→                          {!showAvatar && (
+   469→                            <span className={cn('text-[10px] text-muted-foreground mt-0.5', isMine && 'text-right')}>
+   470→                              {formatTime(msg.createdAt)}
+   471→                            </span>
+   472→                          )}
+   473→                        </div>
+   474→                      </motion.div>
+   475→                    );
+   476→                  })}
+   477→                </div>
+   478→              </div>
+   479→            ))}
+   480→            <div ref={messagesEndRef} />
+   481→          </div>
+   482→        </ScrollArea>
+   483→
+   484→        {/* Mention Picker */}
+   485→        <AnimatePresence>
+   486→          {showMentionPicker && (
+   487→            <motion.div
+   488→n              initial={{ opacity: 0, y: 10 }}
+   489→              animate={{ opacity: 1, y: 0 }}
+   490→              exit={{ opacity: 0, y: 10 }}
+   491→              className="absolute bottom-20 left-4 md:left-72 z-30 bg-popover border rounded-lg shadow-lg p-1 w-56"
+   492→            >
+   493→              <p className="text-xs text-muted-foreground px-2 py-1.5 font-medium">Mention someone</p>
+   494→              {MOCK_USERS.filter(u => u.id !== currentUserId).map(user => (
+   495→                <button
+   496→                  key={user.id}
+   497→                  onClick={() => handleMention(user.name)}
+   498→                  className="w-full flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-muted transition-colors text-left"
+   499→                >
+   500→                  <Avatar className="h-6 w-6"><AvatarFallback className="text-[10px]">{getInitials(user.name)}</AvatarFallback></Avatar>
+   501→                  <span className="text-sm">{user.name}</span>
+   502→                  <span className="text-xs text-muted-foreground ml-auto">{user.role}</span>
+   503→                </button>
+   504→              ))}
+   505→            </motion.div>
+   506→          )}
+   507→        </AnimatePresence>
+   508→
+   509→        {/* Message Input */}
+   510→        <div className="border-t p-3 md:p-4 shrink-0 relative">
+   511→          {isInternal && (
+   512→            <div className="flex items-center gap-1.5 mb-2 px-1">
+   513→              <Lock className="h-3 w-3 text-amber-600" />
+   514→              <span className="text-xs text-amber-600 font-medium">Internal message — only managers will see this</span>
+   515→            </div>
+   516→          )}
+   517→          <div className="flex items-end gap-2">
+   518→            <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={handleAttach}>
+   519→              <Paperclip className="h-4 w-4" />
+   520→            </Button>
+   521→            <div className="flex-1 relative">
+   522→              <textarea
+   523→                ref={inputRef}
+   524→                value={messageInput}
+   525→                onChange={e => setMessageInput(e.target.value)}
+   526→                onKeyDown={handleKeyDown}
+   527→                placeholder="Type a message..."
+   528→                rows={1}
+   529→                className={cn(
+   530→                  'flex w-full rounded-lg border bg-transparent px-3 py-2 text-sm resize-none',
+   531→                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+   532→                  'min-h-[36px] max-h-[120px]',
+   533→                  'placeholder:text-muted-foreground'
+   534→                )}
+   535→                style={{ height: 'auto', overflow: 'hidden' }}
+   536→                onInput={e => {
+   537→                  const t = e.target as HTMLTextAreaElement;
+   538→                  t.style.height = 'auto';
+   539→                  t.style.height = Math.min(t.scrollHeight, 120) + 'px';
+   540→                }}
+   541→              />
+   542→            </div>
+   543→            <Button
+   544→              variant="ghost"
+   545→              size="icon"
+   546→              className="h-9 w-9 shrink-0"
+   547→              onClick={() => setShowMentionPicker(prev => !prev)}
+   548→            >
+   549→              <AtSign className="h-4 w-4" />
+   550→            </Button>
+   551→            <Button
+   552→              size="icon"
+   553→              className="h-9 w-9 shrink-0"
+   554→              onClick={handleSend}
+   555→              disabled={!messageInput.trim()}
+   556→            >
+   557→              <Send className="h-4 w-4" />
+   558→            </Button>
+   559→          </div>
+   560→        </div>
+   561→      </main>
+   562→    </div>
+   563→  );
+   564→}

@@ -1,0 +1,632 @@
+     1→import { NextResponse } from 'next/server';
+     2→import { db } from '@/lib/db';
+     3→import bcrypt from 'bcryptjs';
+     4→
+     5→// POST /api/seed - Seed database with demo data
+     6→export async function POST() {
+     7→  try {
+     8→    // Check if data already exists
+     9→    const existingAdmin = await db.user.findUnique({
+    10→      where: { email: 'admin@castalia.com' },
+    11→    });
+    12→
+    13→    if (existingAdmin) {
+    14→      return NextResponse.json({
+    15→        message: 'Database already seeded. Use a fresh database to re-seed.',
+    16→        alreadySeeded: true,
+    17→      });
+    18→    }
+    19→
+    20→    const passwordHash = await bcrypt.hash('password123', 12);
+    21→
+    22→    // ==================== Create Users ====================
+    23→    const admin = await db.user.create({
+    24→      data: {
+    25→        email: 'admin@castalia.com',
+    26→        password: passwordHash,
+    27→        name: 'Carlos Mendoza',
+    28→        role: 'SUPER_ADMIN',
+    29→        phone: '+52 555 010 0100',
+    30→        position: 'Director General',
+    31→        avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Carlos',
+    32→      },
+    33→    });
+    34→
+    35→    const manager1 = await db.user.create({
+    36→      data: {
+    37→        email: 'manager1@castalia.com',
+    38→        password: passwordHash,
+    39→        name: 'Ana García',
+    40→        role: 'MANAGER',
+    41→        phone: '+52 555 020 0200',
+    42→        position: 'Gerente de Proyecto',
+    43→        avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Ana',
+    44→      },
+    45→    });
+    46→
+    47→    const manager2 = await db.user.create({
+    48→      data: {
+    49→        email: 'manager2@castalia.com',
+    50→        password: passwordHash,
+    51→        name: 'Roberto López',
+    52→        role: 'MANAGER',
+    53→        phone: '+52 555 030 0300',
+    54→        position: 'Gerente de Obra',
+    55→        avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Roberto',
+    56→      },
+    57→    });
+    58→
+    59→    const employee = await db.user.create({
+    60→      data: {
+    61→        email: 'empleado@castalia.com',
+    62→        password: passwordHash,
+    63→        name: 'Miguel Hernández',
+    64→        role: 'EMPLOYEE',
+    65→        phone: '+52 555 040 0400',
+    66→        position: 'Supervisor de Campo',
+    67→        avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Miguel',
+    68→      },
+    69→    });
+    70→
+    71→    const client = await db.user.create({
+    72→      data: {
+    73→        email: 'cliente@email.com',
+    74→        password: passwordHash,
+    75→        name: 'Fernanda Torres',
+    76→        role: 'CLIENT',
+    77→        phone: '+52 555 050 0500',
+    78→        position: 'Directora de Inversiones',
+    79→        avatar: 'https://api.dicebear.com/9.x/avataaars/svg?seed=Fernanda',
+    80→      },
+    81→    });
+    82→
+    83→    // ==================== Create Projects ====================
+    84→    const project1 = await db.project.create({
+    85→      data: {
+    86→        name: 'Residencial Villa Esmeralda',
+    87→        clientName: 'Inmobiliaria Del Valle S.A.',
+    88→        clientEmail: 'proyectos@delvalle.mx',
+    89→        address: 'Av. Paseo de la Reforma 505, Col. Juárez',
+    90→        city: 'Ciudad de México',
+    91→        state: 'CDMX',
+    92→        zipCode: '06600',
+    93→        latitude: 19.4260,
+    94→        longitude: -99.1676,
+    95→        description: 'Construcción de complejo residencial de lujo con 12 torres, áreas verdes y amenidades completas. Incluye estacionamiento subterráneo para 500 vehículos y clubhouse.',
+    96→        status: 'ACTIVE',
+    97→        priority: 'HIGH',
+    98→        startDate: new Date('2024-09-01'),
+    99→        estimatedEnd: new Date('2025-12-15'),
+   100→        progress: 35,
+   101→        coverImage: 'https://picsum.photos/seed/villa-esmeralda/1200/600',
+   102→        creatorId: admin.id,
+   103→      },
+   104→    });
+   105→
+   106→    const project2 = await db.project.create({
+   107→      data: {
+   108→        name: 'Centro Comercial Plaza Norte',
+   109→        clientName: 'Grupo Comercial Azteca',
+   110→        clientEmail: 'obras@azteca.com',
+   111→        address: 'Blvd. Manuel Ávila Camacho 36, Col. Lomas de Chapultepec',
+   112→        city: 'Ciudad de México',
+   113→        state: 'CDMX',
+   114→        zipCode: '11000',
+   115→        latitude: 19.4333,
+   116→        longitude: -99.1945,
+   117→        description: 'Remodelación y ampliación de centro comercial existente. Adición de 3 niveles de comercio, food court renovado y cine premium.',
+   118→        status: 'ACTIVE',
+   119→        priority: 'MEDIUM',
+   120→        startDate: new Date('2024-11-15'),
+   121→        estimatedEnd: new Date('2025-08-30'),
+   122→        progress: 18,
+   123→        coverImage: 'https://picsum.photos/seed/plaza-norte/1200/600',
+   124→        creatorId: manager1.id,
+   125→      },
+   126→    });
+   127→
+   128→    const project3 = await db.project.create({
+   129→      data: {
+   130→        name: 'Oficinas Corporativas Torre Alta',
+   131→        clientName: 'Fernanda Torres',
+   132→        clientEmail: 'cliente@email.com',
+   133→        address: 'Calz. de Tlalpan 2500, Col. Santa Ursula Coapa',
+   134→        city: 'Ciudad de México',
+   135→        state: 'CDMX',
+   136→        zipCode: '14040',
+   137→        latitude: 19.3563,
+   138→        longitude: -99.1347,
+   139→        description: 'Edificio de oficinas corporativas clase A de 25 pisos con certificación LEED Platinum. Sistemas de automatización y eficiencia energética.',
+   140→        status: 'PAUSED',
+   141→        priority: 'HIGH',
+   142→        startDate: new Date('2024-06-01'),
+   143→        estimatedEnd: new Date('2025-06-30'),
+   144→        progress: 55,
+   145→        coverImage: 'https://picsum.photos/seed/torre-alta/1200/600',
+   146→        creatorId: manager2.id,
+   147→      },
+   148→    });
+   149→
+   150→    const project4 = await db.project.create({
+   151→      data: {
+   152→        name: 'Casa Club Bosques del Pedregal',
+   153→        clientName: 'Desarrolladora Pedregal Premium',
+   154→        clientEmail: 'info@pedregalpremium.mx',
+   155→        address: 'Av. de las Palmas 1200, Col. Bosques de las Lomas',
+   156→        city: 'Ciudad de México',
+   157→        state: 'CDMX',
+   158→        zipCode: '05120',
+   159→        latitude: 19.3823,
+   160→        longitude: -99.2287,
+   161→        description: 'Construcción de casa club con alberca olímpica, gimnasio, spa, áreas de eventos y restaurantes. Jardines paisajísticos.',
+   162→        status: 'COMPLETED',
+   163→        priority: 'MEDIUM',
+   164→        startDate: new Date('2024-01-10'),
+   165→        estimatedEnd: new Date('2024-10-30'),
+   166→        completedAt: new Date('2024-10-25'),
+   167→        progress: 100,
+   168→        coverImage: 'https://picsum.photos/seed/casa-club/1200/600',
+   169→        creatorId: admin.id,
+   170→      },
+   171→    });
+   172→
+   173→    // ==================== Add Project Members ====================
+   174→    const memberData = [
+   175→      { projectId: project1.id, userId: admin.id, role: 'MANAGER' },
+   176→      { projectId: project1.id, userId: manager1.id, role: 'MANAGER' },
+   177→      { projectId: project1.id, userId: employee.id, role: 'MEMBER' },
+   178→      { projectId: project2.id, userId: manager1.id, role: 'MANAGER' },
+   179→      { projectId: project2.id, userId: manager2.id, role: 'MANAGER' },
+   180→      { projectId: project2.id, userId: employee.id, role: 'MEMBER' },
+   181→      { projectId: project3.id, userId: admin.id, role: 'MANAGER' },
+   182→      { projectId: project3.id, userId: manager2.id, role: 'MANAGER' },
+   183→      { projectId: project3.id, userId: employee.id, role: 'MEMBER' },
+   184→      { projectId: project4.id, userId: admin.id, role: 'MANAGER' },
+   185→      { projectId: project4.id, userId: manager1.id, role: 'MEMBER' },
+   186→      { projectId: project4.id, userId: manager2.id, role: 'MEMBER' },
+   187→    ];
+   188→
+   189→    await db.projectMember.createMany({ data: memberData });
+   190→
+   191→    // ==================== Create Tasks ====================
+   192→    const tasksData = [
+   193→      // Project 1 tasks
+   194→      {
+   195→        projectId: project1.id, title: 'Excavación y cimentación Torre A', description: 'Realizar excavación hasta nivel de desplante y construir cimentación profunda con pilotes de concreto.',
+   196→        status: 'COMPLETED', priority: 'HIGH', creatorId: manager1.id, assigneeId: employee.id,
+   197→        dueDate: new Date('2024-11-30'), checklist: JSON.stringify([
+   198→          { text: 'Estudio de mecánica de suelos', done: true },
+   199→          { text: 'Trabajos de excavación', done: true },
+   200→          { text: 'Perforación de pilotes', done: true },
+   201→          { text: 'Armadura y colado de pilotes', done: true },
+   202→          { text: 'Pruebas de carga', done: false },
+   203→        ]),
+   204→      },
+   205→      {
+   206→        projectId: project1.id, title: 'Estructura niveles 1-3 Torre A', description: 'Construcción de estructura de concreto reforzado para los primeros 3 niveles.',
+   207→        status: 'IN_PROGRESS', priority: 'HIGH', creatorId: manager1.id, assigneeId: employee.id,
+   208→        dueDate: new Date('2025-02-28'), checklist: JSON.stringify([
+   209→          { text: 'Cimbra y armado nivel 1', done: true },
+   210→          { text: 'Cimbra y armado nivel 2', done: true },
+   211→          { text: 'Cimbra y armado nivel 3', done: false },
+   212→          { text: 'Colado y curado', done: false },
+   213→        ]),
+   214→      },
+   215→      {
+   216→        projectId: project1.id, title: 'Instalaciones hidráulicas Torre A', description: 'Instalación de red hidráulica sanitaria y pluvial en niveles 1-3.',
+   217→        status: 'PENDING', priority: 'MEDIUM', creatorId: admin.id, assigneeId: manager1.id,
+   218→        dueDate: new Date('2025-03-15'),
+   219→      },
+   220→      {
+   221→        projectId: project1.id, title: 'Instalaciones eléctricas torres', description: 'Diseño e instalación de sistema eléctrico para todas las torres.',
+   222→        status: 'PENDING', priority: 'MEDIUM', creatorId: manager1.id, assigneeId: null,
+   223→        dueDate: new Date('2025-05-30'),
+   224→      },
+   225→      {
+   226→        projectId: project1.id, title: 'Acabados interiores Torre A', description: 'Pisos, muros, pintura y cancelería para unidades del nivel 1-5.',
+   227→        status: 'NEEDS_REVIEW', priority: 'LOW', creatorId: employee.id, assigneeId: manager1.id,
+   228→        dueDate: new Date('2025-04-30'), checklist: JSON.stringify([
+   229→          { text: 'Muestras de materiales aprobadas', done: true },
+   230→          { text: 'Instalación de pisos', done: true },
+   231→          { text: 'Pintura muros', done: false },
+   232→          { text: 'Cancelería', done: false },
+   233→        ]),
+   234→      },
+   235→      // Project 2 tasks
+   236→      {
+   237→        projectId: project2.id, title: 'Demolición controlada área existente', description: 'Demolición de 2,500 m2 de área comercial existente manteniendo estructura perimetral.',
+   238→        status: 'COMPLETED', priority: 'HIGH', creatorId: manager1.id, assigneeId: employee.id,
+   239→        dueDate: new Date('2024-12-20'),
+   240→      },
+   241→      {
+   242→        projectId: project2.id, title: 'Estructura nueva ampliación', description: 'Construcción de estructura metálica para 3 niveles de nueva área comercial.',
+   243→        status: 'IN_PROGRESS', priority: 'HIGH', creatorId: manager2.id, assigneeId: employee.id,
+   244→        dueDate: new Date('2025-04-15'),
+   245→      },
+   246→      {
+   247→        projectId: project2.id, title: 'Sistema HVAC centro comercial', description: 'Instalación de sistema de climatización central para toda la planta.',
+   248→        status: 'PENDING', priority: 'MEDIUM', creatorId: manager1.id, assigneeId: null,
+   249→        dueDate: new Date('2025-06-30'),
+   250→      },
+   251→      {
+   252→        projectId: project2.id, title: 'Acabados y señalización', description: 'Acabados finales, iluminación, mobiliario y señalización wayfinding.',
+   253→        status: 'PENDING', priority: 'LOW', creatorId: manager2.id, assigneeId: manager1.id,
+   254→        dueDate: new Date('2025-08-15'),
+   255→      },
+   256→      // Project 3 tasks
+   257→      {
+   258→        projectId: project3.id, title: 'Estructura niveles 15-20', description: 'Continuación de estructura de concreto para niveles superiores del edificio.',
+   259→        status: 'IN_PROGRESS', priority: 'URGENT', creatorId: manager2.id, assigneeId: employee.id,
+   260→        dueDate: new Date('2025-03-01'),
+   261→      },
+   262→      {
+   263→        projectId: project3.id, title: 'Fachada de cristal', description: 'Instalación de sistema de curtain wall para fachada del edificio.',
+   264→        status: 'PENDING', priority: 'HIGH', creatorId: admin.id, assigneeId: manager2.id,
+   265→        dueDate: new Date('2025-05-15'),
+   266→      },
+   267→      {
+   268→        projectId: project3.id, title: 'Sistemas de automatización', description: 'Instalación de sistema BMS (Building Management System) para control integral del edificio.',
+   269→        status: 'PENDING', priority: 'MEDIUM', creatorId: manager2.id, assigneeId: null,
+   270→        dueDate: new Date('2025-06-30'),
+   271→      },
+   272→      // Project 4 tasks (completed)
+   273→      {
+   274→        projectId: project4.id, title: 'Construcción alberca olímpica', description: 'Excavación, impermeabilización, equipamiento de alberca de 50m.',
+   275→        status: 'COMPLETED', priority: 'HIGH', creatorId: admin.id, assigneeId: manager1.id,
+   276→        dueDate: new Date('2024-06-30'), completedAt: new Date('2024-06-28'),
+   277→      },
+   278→      {
+   279→        projectId: project4.id, title: 'Paisajismo y jardines', description: 'Diseño e instalación de jardines, áreas verdes e iluminación exterior.',
+   280→        status: 'COMPLETED', priority: 'MEDIUM', creatorId: manager1.id, assigneeId: manager2.id,
+   281→        dueDate: new Date('2024-09-15'), completedAt: new Date('2024-09-20'),
+   282→      },
+   283→    ];
+   284→
+   285→    const createdTasks = await db.task.createMany({
+   286→      data: tasksData.map((t) => ({
+   287→        ...t,
+   288→        checklist: t.checklist || undefined,
+   289→        completedAt: t.status === 'COMPLETED' ? (t.completedAt || new Date()) : undefined,
+   290→      })),
+   291→    });
+   292→
+   293→    // ==================== Create Photos ====================
+   294→    const photosData = [
+   295→      // Project 1 photos
+   296→      {
+   297→        projectId: project1.id, uploadedBy: employee.id,
+   298→        url: `https://picsum.photos/seed/p1-site/800/600`,
+   299→        fileName: 'vista-general-obra.jpg', fileType: 'image',
+   300→        tags: 'before,general', caption: 'Vista general del terreno antes de inicio de obra',
+   301→        isApproved: true, isVisibleToClient: true, isUrgent: false,
+   302→        address: 'Av. Paseo de la Reforma 505, Col. Juárez', latitude: 19.426, longitude: -99.1676,
+   303→        createdAt: new Date('2024-09-01T09:00:00'),
+   304→      },
+   305→      {
+   306→        projectId: project1.id, uploadedBy: employee.id,
+   307→        url: `https://picsum.photos/seed/p1-excavation/800/600`,
+   308→        fileName: 'excavacion-torre-a.jpg', fileType: 'image',
+   309→        tags: 'during,problem', caption: 'Excavación Torre A - se encontró nivel freático alto',
+   310→        isApproved: true, isVisibleToClient: false, isUrgent: true,
+   311→        address: 'Av. Paseo de la Reforma 505, Col. Juárez', latitude: 19.4261, longitude: -99.1675,
+   312→        createdAt: new Date('2024-09-15T14:30:00'),
+   313→      },
+   314→      {
+   315→        projectId: project1.id, uploadedBy: manager1.id,
+   316→        url: `https://picsum.photos/seed/p1-cimentacion/800/600`,
+   317→        fileName: 'cimentacion-pilotes.jpg', fileType: 'image',
+   318→        tags: 'during,evidence', caption: 'Avance de cimentación con pilotes - 80% completado',
+   319→        isApproved: true, isVisibleToClient: true, isUrgent: false,
+   320→        latitude: 19.4262, longitude: -99.1674,
+   321→        createdAt: new Date('2024-10-20T11:00:00'),
+   322→      },
+   323→      {
+   324→        projectId: project1.id, uploadedBy: employee.id,
+   325→        url: `https://picsum.photos/seed/p1-estructura/800/600`,
+   326→        fileName: 'estructura-nivel2.jpg', fileType: 'image',
+   327→        tags: 'during,inspection', caption: 'Inspección de estructura nivel 2 - cumplimiento de especificaciones',
+   328→        isApproved: false, isVisibleToClient: false, isUrgent: false,
+   329→        createdAt: new Date('2025-01-10T16:00:00'),
+   330→      },
+   331→      {
+   332→        projectId: project1.id, uploadedBy: manager1.id,
+   333→        url: `https://picsum.photos/seed/p1-material/800/600`,
+   334→        fileName: 'descarga-material.jpg', fileType: 'image',
+   335→        tags: 'during,material', caption: 'Descarga de acero de refuerzo para niveles 2-3',
+   336→        isApproved: true, isVisibleToClient: false, isUrgent: false,
+   337→        createdAt: new Date('2025-01-15T08:30:00'),
+   338→      },
+   339→      // Project 2 photos
+   340→      {
+   341→        projectId: project2.id, uploadedBy: employee.id,
+   342→        url: `https://picsum.photos/seed/p2-before/800/600`,
+   343→        fileName: 'antes-demolicion.jpg', fileType: 'image',
+   344→        tags: 'before,general', caption: 'Estado original del área antes de demolición',
+   345→        isApproved: true, isVisibleToClient: true, isUrgent: false,
+   346→        createdAt: new Date('2024-11-15T10:00:00'),
+   347→      },
+   348→      {
+   349→        projectId: project2.id, uploadedBy: manager2.id,
+   350→        url: `https://picsum.photos/seed/p2-demolition/800/600`,
+   351→        fileName: 'demolicion-controlada.jpg', fileType: 'image',
+   352→        tags: 'during,problem', caption: 'Proceso de demolición controlada - se encontraron instalaciones no mapeadas',
+   353→        isApproved: true, isVisibleToClient: false, isUrgent: true,
+   354→        createdAt: new Date('2024-11-28T13:45:00'),
+   355→      },
+   356→      {
+   357→        projectId: project2.id, uploadedBy: employee.id,
+   358→        url: `https://picsum.photos/seed/p2-steel/800/600`,
+   359→        fileName: 'estructura-metalica.jpg', fileType: 'image',
+   360→        tags: 'during,evidence,material', caption: 'Montaje de estructura metálica - primera fase',
+   361→        isApproved: true, isVisibleToClient: true, isUrgent: false,
+   362→        createdAt: new Date('2025-01-05T09:15:00'),
+   363→      },
+   364→      // Project 3 photos
+   365→      {
+   366→        projectId: project3.id, uploadedBy: employee.id,
+   367→        url: `https://picsum.photos/seed/p3-superior/800/600`,
+   368→        fileName: 'niveles-superiores.jpg', fileType: 'image',
+   369→        tags: 'during,inspection', caption: 'Vista de niveles 12-15 en construcción',
+   370→        isApproved: true, isVisibleToClient: false, isUrgent: false,
+   371→        createdAt: new Date('2024-10-10T15:00:00'),
+   372→      },
+   373→      {
+   374→        projectId: project3.id, uploadedBy: manager2.id,
+   375→        url: `https://picsum.photos/seed/p3-paused/800/600`,
+   376→        fileName: 'obra-pausada.jpg', fileType: 'image',
+   377→        tags: 'problem', caption: 'Estado actual de la obra - pausada por revisión de permisos',
+   378→        isApproved: true, isVisibleToClient: false, isUrgent: true,
+   379→        createdAt: new Date('2024-12-01T10:00:00'),
+   380→      },
+   381→      // Project 4 photos (completed project)
+   382→      {
+   383→        projectId: project4.id, uploadedBy: manager1.id,
+   384→        url: `https://picsum.photos/seed/p4-alberca/800/600`,
+   385→        fileName: 'alberca-final.jpg', fileType: 'image',
+   386→        tags: 'after,evidence,client', caption: 'Alberca olímpica terminada - entrega final',
+   387→        isApproved: true, isVisibleToClient: true, isUrgent: false,
+   388→        createdAt: new Date('2024-10-25T12:00:00'),
+   389→      },
+   390→      {
+   391→        projectId: project4.id, uploadedBy: manager2.id,
+   392→        url: `https://picsum.photos/seed/p4-jardin/800/600`,
+   393→        fileName: 'jardines-terminados.jpg', fileType: 'image',
+   394→        tags: 'after,client', caption: 'Jardines y áreas verdes terminadas',
+   395→        isApproved: true, isVisibleToClient: true, isUrgent: false,
+   396→        createdAt: new Date('2024-10-25T14:00:00'),
+   397→      },
+   398→    ];
+   399→
+   400→    await db.photo.createMany({ data: photosData });
+   401→
+   402→    // ==================== Create Chat Messages ====================
+   403→    const chatMessagesData = [
+   404→      // General managers chat (no projectId)
+   405→      {
+   406→        senderId: admin.id, content: 'Buenos días equipo. Revisemos el estatus semanal de los proyectos.',
+   407→        messageType: 'TEXT', isInternal: false, createdAt: new Date('2025-01-13T08:00:00'),
+   408→      },
+   409→      {
+   410→        senderId: manager1.id, content: 'Buenos días Carlos. Villa Esmeralda va al 35%, el proyecto va bien pero tuvimos un tema con el nivel freático.',
+   411→        messageType: 'TEXT', isInternal: false, mentions: JSON.stringify([admin.id]),
+   412→        createdAt: new Date('2025-01-13T08:15:00'),
+   413→      },
+   414→      {
+   415→        senderId: manager2.id, content: 'Plaza Norte avanza. La demolición terminó, ahora vamos con estructura metálica.',
+   416→        messageType: 'TEXT', isInternal: false, createdAt: new Date('2025-01-13T08:20:00'),
+   417→      },
+   418→      {
+   419→        senderId: admin.id, content: 'IMPORTANTE: Torre Alta sigue pausada. El cliente necesita resolver permisos de impacto vial. No programen recursos hasta nuevo aviso.',
+   420→        messageType: 'TEXT', isInternal: true, mentions: JSON.stringify([manager1.id, manager2.id]),
+   421→        createdAt: new Date('2025-01-13T08:30:00'),
+   422→      },
+   423→      {
+   424→        senderId: manager1.id, content: 'Entendido. ¿Reasignamos a Miguel a otros proyectos mientras tanto?',
+   425→        messageType: 'TEXT', isInternal: true, createdAt: new Date('2025-01-13T08:35:00'),
+   426→      },
+   427→      {
+   428→        senderId: admin.id, content: 'Sí, que se enfoque en Villa Esmeralda y Plaza Norte. Hay suficiente trabajo ahí.',
+   429→        messageType: 'TEXT', isInternal: true, createdAt: new Date('2025-01-13T08:40:00'),
+   430→      },
+   431→      // Project 1 chat
+   432→      {
+   433→        senderId: manager1.id, content: 'Miguel, ¿cómo va el armado del nivel 3 de la Torre A?',
+   434→        projectId: project1.id, messageType: 'TEXT', isInternal: false,
+   435→        mentions: JSON.stringify([employee.id]), createdAt: new Date('2025-01-14T09:00:00'),
+   436→      },
+   437→      {
+   438→        senderId: employee.id, content: 'Vamos al 60% del armado. Esperamos terminar el acero de columnas hoy.',
+   439→        projectId: project1.id, messageType: 'TEXT', isInternal: false,
+   440→        createdAt: new Date('2025-01-14T09:30:00'),
+   441→      },
+   442→      {
+   443→        senderId: manager1.id, content: 'Nota interna: El proveedor de acero aumentó precios 12%. Necesitamos renegociar.',
+   444→        projectId: project1.id, messageType: 'TEXT', isInternal: true,
+   445→        createdAt: new Date('2025-01-14T10:00:00'),
+   446→      },
+   447→      {
+   448→        senderId: employee.id, content: 'Les comparto foto del avance de hoy. [Foto adjunta]',
+   449→        projectId: project1.id, messageType: 'IMAGE', isInternal: false,
+   450→        fileUrl: 'https://picsum.photos/seed/p1-estructura/800/600',
+   451→        createdAt: new Date('2025-01-14T15:00:00'),
+   452→      },
+   453→      // Project 2 chat
+   454→      {
+   455→        senderId: manager2.id, content: 'La estructura metálica del nivel 1 está al 40%. Vamos bien con los tiempos.',
+   456→        projectId: project2.id, messageType: 'TEXT', isInternal: false,
+   457→        createdAt: new Date('2025-01-14T11:00:00'),
+   458→      },
+   459→    ];
+   460→
+   461→    await db.chatMessage.createMany({ data: chatMessagesData });
+   462→
+   463→    // ==================== Create Activity Logs ====================
+   464→    const activityLogsData = [
+   465→      { projectId: project1.id, userId: admin.id, action: 'CREATED', entityType: 'PROJECT', entityId: project1.id, details: 'Proyecto "Residencial Villa Esmeralda" creado', createdAt: new Date('2024-09-01T08:00:00') },
+   466→      { projectId: project1.id, userId: employee.id, action: 'UPLOADED', entityType: 'PHOTO', details: 'Foto de vista general del terreno subida', createdAt: new Date('2024-09-01T09:00:00') },
+   467→      { projectId: project1.id, userId: manager1.id, action: 'CREATED', entityType: 'TASK', details: 'Tarea "Excavación y cimentación Torre A" creada', createdAt: new Date('2024-09-05T10:00:00') },
+   468→      { projectId: project1.id, userId: employee.id, action: 'STATUS_CHANGED', entityType: 'TASK', details: 'Tarea "Excavación y cimentación Torre A" cambiada a COMPLETADA', createdAt: new Date('2024-11-28T17:00:00') },
+   469→      { projectId: project1.id, userId: employee.id, action: 'UPLOADED', entityType: 'PHOTO', details: 'Foto de excavación con problema de nivel freático subida', createdAt: new Date('2024-09-15T14:30:00') },
+   470→      { projectId: project2.id, userId: manager1.id, action: 'CREATED', entityType: 'PROJECT', entityId: project2.id, details: 'Proyecto "Centro Comercial Plaza Norte" creado', createdAt: new Date('2024-11-15T09:00:00') },
+   471→      { projectId: project2.id, userId: employee.id, action: 'STATUS_CHANGED', entityType: 'TASK', details: 'Demolición controlada completada exitosamente', createdAt: new Date('2024-12-20T16:00:00') },
+   472→      { projectId: project3.id, userId: manager2.id, action: 'CREATED', entityType: 'PROJECT', entityId: project3.id, details: 'Proyecto "Oficinas Corporativas Torre Alta" creado', createdAt: new Date('2024-06-01T08:00:00') },
+   473→      { projectId: project3.id, userId: admin.id, action: 'STATUS_CHANGED', entityType: 'PROJECT', entityId: project3.id, details: 'Proyecto pausado por revisión de permisos', createdAt: new Date('2024-12-01T10:00:00') },
+   474→      { projectId: project4.id, userId: admin.id, action: 'CREATED', entityType: 'PROJECT', entityId: project4.id, details: 'Proyecto "Casa Club Bosques del Pedregal" creado', createdAt: new Date('2024-01-10T08:00:00') },
+   475→      { projectId: project4.id, userId: admin.id, action: 'STATUS_CHANGED', entityType: 'PROJECT', entityId: project4.id, details: 'Proyecto marcado como COMPLETADO', createdAt: new Date('2024-10-25T18:00:00') },
+   476→      { projectId: project1.id, userId: manager1.id, action: 'COMMENTED', entityType: 'PHOTO', details: 'Foto de excavación aprobada para cliente', createdAt: new Date('2024-09-16T09:00:00') },
+   477→    ];
+   478→
+   479→    await db.activityLog.createMany({ data: activityLogsData });
+   480→
+   481→    // ==================== Create Reports ====================
+   482→    const reportsData = [
+   483→      {
+   484→        projectId: project1.id, title: 'Reporte de Avance Mensual - Enero 2025',
+   485→        type: 'PROGRESS',
+   486→        content: JSON.stringify({
+   487→          sections: [
+   488→            { title: 'Resumen Ejecutivo', content: 'El proyecto Villa Esmeralda alcanza el 35% de avance general. Se completó exitosamente la cimentación de la Torre A y se avanza en estructura de niveles 2-3.' },
+   489→            { title: 'Avance por Área', content: 'Cimentación: 100%\nEstructura Torre A (N1-3): 60%\nInstalaciones Hidráulicas: 0%\nInstalaciones Eléctricas: 0%' },
+   490→            { title: 'Observaciones', content: 'Se detectó nivel freático alto durante excavación, se implementaron soluciones de bombeo. Proveedor de acero incrementó precios 12%.' },
+   491→          ],
+   492→        }),
+   493→        photos: JSON.stringify([]),
+   494→        status: 'FINAL', generatedBy: manager1.id,
+   495→      },
+   496→      {
+   497→        projectId: project1.id, title: 'Inspección de Estructura Nivel 2',
+   498→        type: 'INSPECTION',
+   499→        content: JSON.stringify({
+   500→          sections: [
+   501→            { title: 'Inspección Realizada', content: 'Revisión de especificaciones de concreto f\'c=350 kg/cm2 y acero de refuerzo grado 60.' },
+   502→            { title: 'Resultados', content: 'Cumplimiento satisfactorio en recubrimientos, separación de varillas y dimensiones de elementos. Se encontró una pequeña variación en el espesor de losa (+5mm) dentro de tolerancia.' },
+   503→          ],
+   504→        }),
+   505→        photos: JSON.stringify([]),
+   506→        status: 'DRAFT', generatedBy: manager1.id,
+   507→      },
+   508→      {
+   509→        projectId: project2.id, title: 'Reporte de Demolición - Plaza Norte',
+   510→        type: 'PROGRESS',
+   511→        content: JSON.stringify({
+   512→          sections: [
+   513→            { title: 'Demolición Completada', content: 'Se completó la demolición controlada de 2,500 m2 del área existente. Se mantuvo la estructura perimetral sin daños.' },
+   514→            { title: 'Hallazgos', content: 'Se encontraron instalaciones no mapeadas (drenaje pluvial antiguo) que requirieron adaptación del plan.' },
+   515→          ],
+   516→        }),
+   517→        photos: JSON.stringify([]),
+   518→        status: 'SENT', generatedBy: manager2.id, sentToEmail: 'obras@azteca.com',
+   519→      },
+   520→      {
+   521→        projectId: project4.id, title: 'Reporte Final de Entrega - Casa Club',
+   522→        type: 'BEFORE_AFTER',
+   523→        content: JSON.stringify({
+   524→          sections: [
+   525→            { title: 'Proyecto Entregado', content: 'Casa Club Bosques del Pedregal entregado exitosamente el 25 de octubre de 2024. Incluye alberca olímpica, gimnasio, spa, áreas de eventos y paisajismo.' },
+   526→            { title: 'Observaciones Finales', content: 'Entrega anticipada 5 días antes de la fecha comprometida. Cliente satisfecho con la calidad de los acabados.' },
+   527→          ],
+   528→        }),
+   529→        photos: JSON.stringify([]),
+   530→        status: 'SENT', generatedBy: admin.id, sentToEmail: 'info@pedregalpremium.mx',
+   531→      },
+   532→    ];
+   533→
+   534→    await db.report.createMany({ data: reportsData });
+   535→
+   536→    // ==================== Create Internal Notes ====================
+   537→    const notesData = [
+   538→      {
+   539→        projectId: project1.id, authorId: manager1.id,
+   540→        content: '⚠️ ATENCIÓN: El proveedor de concreto Cemex está retrasando entregas. Considerar cambiar a Holcim como respaldo. Hablar con Carlos sobre presupuesto.',
+   541→        isPinned: true,
+   542→      },
+   543→      {
+   544→        projectId: project1.id, authorId: manager1.id,
+   545→        content: 'El cliente pidió visitar la obra el viernes 17 de enero. Preparar zona segura y tener planos actualizados. Coordinar con Miguel.',
+   546→        isPinned: true,
+   547→      },
+   548→      {
+   549→        projectId: project1.id, authorId: employee.id,
+   550→        content: 'Se necesita revisar los planos de instalación hidráulica, hay conflicto con ductos eléctricos en el nivel 2. Solicitar astructures una reunión de coordinación.',
+   551→        isPinned: false,
+   552→      },
+   553→      {
+   554→        projectId: project2.id, authorId: manager2.id,
+   555→        content: 'La estructura metálica viene con defectos de fabricación en algunas vigas. Se está tramitando reclamo al proveedor. No afecta cronograma por ahora.',
+   556→        isPinned: true,
+   557→      },
+   558→      {
+   559→        projectId: project3.id, authorId: admin.id,
+   560→        content: 'REUNIÓN CON CLIENTE: La Sra. Torres requiere actualización de costos por la pausa. Preparar estimación de costos adicionales por inflación y extensión de plazos.',
+   561→        isPinned: true,
+   562→      },
+   563→    ];
+   564→
+   565→    await db.internalNote.createMany({ data: notesData });
+   566→
+   567→    // ==================== Create Client Shares ====================
+   568→    const sharesData = [
+   569→      {
+   570→        projectId: project1.id, createdBy: manager1.id,
+   571→        clientEmail: 'proyectos@delvalle.mx', clientName: 'Inmobiliaria Del Valle',
+   572→        password: 'villa2025',
+   573→        expiresAt: new Date('2025-06-30'),
+   574→        allowedPhotos: JSON.stringify([]), // All photos
+   575→        allowedReports: JSON.stringify([]), // All reports
+   576→      },
+   577→      {
+   578→        projectId: project4.id, createdBy: admin.id,
+   579→        clientEmail: 'info@pedregalpremium.mx', clientName: 'Desarrolladora Pedregal',
+   580→        expiresAt: new Date('2025-12-31'),
+   581→        allowedPhotos: JSON.stringify([]),
+   582→        allowedReports: JSON.stringify([]),
+   583→      },
+   584→    ];
+   585→
+   586→    await db.clientShare.createMany({ data: sharesData });
+   587→
+   588→    // ==================== Create Notifications ====================
+   589→    const notificationsData = [
+   590→      { userId: manager1.id, title: 'Tarea necesita revisión', message: 'La tarea "Acabados interiores Torre A" está pendiente de tu revisión.', type: 'TASK', link: `/projects/${project1.id}` },
+   591→      { userId: manager1.id, title: 'Foto urgente', message: 'Se subió una foto marcada como urgente en Villa Esmeralda - nivel freático.', type: 'PHOTO', link: `/projects/${project1.id}` },
+   592→      { userId: employee.id, title: 'Nueva asignación', message: 'Se te asignó la tarea "Estructura niveles 1-3 Torre A".', type: 'TASK', link: `/projects/${project1.id}` },
+   593→      { userId: manager2.id, title: 'Proyecto pausado', message: 'Torre Alta ha sido pausado. No programes recursos hasta nuevo aviso.', type: 'WARNING', link: `/projects/${project3.id}` },
+   594→      { userId: admin.id, title: 'Reporte enviado', message: 'El reporte final de Casa Club fue enviado al cliente.', type: 'REPORT', link: `/projects/${project4.id}` },
+   595→      { userId: manager1.id, title: 'Mención en chat', message: 'Carlos Mendoza te mencionó en el chat general.', type: 'INFO', link: '/chat' },
+   596→      { userId: employee.id, title: 'Mención en chat', message: 'Ana García te mencionó en el chat de Villa Esmeralda.', type: 'INFO', link: `/projects/${project1.id}` },
+   597→      { userId: manager2.id, title: 'Foto urgente', message: 'Se subió una foto marcada como urgente en Plaza Norte - instalaciones no mapeadas.', type: 'URGENT', link: `/projects/${project2.id}` },
+   598→    ];
+   599→
+   600→    await db.notification.createMany({ data: notificationsData });
+   601→
+   602→    return NextResponse.json({
+   603→      message: 'Database seeded successfully!',
+   604→      data: {
+   605→        users: 5,
+   606→        projects: 4,
+   607→        projectMembers: 12,
+   608→        tasks: createdTasks.count,
+   609→        photos: photosData.length,
+   610→        chatMessages: chatMessagesData.length,
+   611→        activityLogs: activityLogsData.length,
+   612→        reports: reportsData.length,
+   613→        internalNotes: notesData.length,
+   614→        clientShares: sharesData.length,
+   615→        notifications: notificationsData.length,
+   616→      },
+   617→      credentials: {
+   618→        admin: { email: 'admin@castalia.com', password: 'password123', role: 'SUPER_ADMIN' },
+   619→        manager1: { email: 'manager1@castalia.com', password: 'password123', role: 'MANAGER' },
+   620→        manager2: { email: 'manager2@castalia.com', password: 'password123', role: 'MANAGER' },
+   621→        employee: { email: 'empleado@castalia.com', password: 'password123', role: 'EMPLOYEE' },
+   622→        client: { email: 'cliente@email.com', password: 'password123', role: 'CLIENT' },
+   623→      },
+   624→    });
+   625→  } catch (error) {
+   626→    console.error('Seed error:', error);
+   627→    return NextResponse.json(
+   628→      { error: 'Internal server error during seeding', details: String(error) },
+   629→      { status: 500 }
+   630→    );
+   631→  }
+   632→}

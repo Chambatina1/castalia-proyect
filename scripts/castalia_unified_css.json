@@ -1,0 +1,21 @@
+{
+  "code": 200,
+  "data": {
+    "description": "",
+    "html": "<html><head><meta name=\"color-scheme\" content=\"light dark\"></head><body><pre style=\"word-wrap: break-word; white-space: pre-wrap;\">#et_mobile_nav_menu .mobile_nav.opened .mobile_menu_bar::before,.et_pb_module.et_pb_menu .et_mobile_nav_menu .mobile_nav.opened .mobile_menu_bar::before{content:'\\4d'}ul.et_mobile_menu li.menu-item-has-children .mobile-toggle,ul.et_mobile_menu li.page_item_has_children .mobile-toggle,.et-db #et-boc .et-l ul.et_mobile_menu li.menu-item-has-children .mobile-toggle,.et-db #et-boc .et-l ul.et_mobile_menu li.page_item_has_children .mobile-toggle{width:44px;height:100%;padding:0px!important;max-height:44px;border:none;position:absolute;right:0px;top:0px;z-index:999;background-color:transparent}ul.et_mobile_menu>li.menu-item-has-children,ul.et_mobile_menu>li.page_item_has_children,ul.et_mobile_menu>li.menu-item-has-children .sub-menu li.menu-item-has-children,.et-db #et-boc .et-l ul.et_mobile_menu>li.menu-item-has-children,.et-db #et-boc .et-l ul.et_mobile_menu>li.page_item_has_children,.et-db #et-boc .et-l ul.et_mobile_menu>li.menu-item-has-children .sub-menu li.menu-item-has-children{position:relative}.et_mobile_menu .menu-item-has-children>a,.et-db #et-boc .et-l .et_mobile_menu .menu-item-has-children>a{background-color:transparent}ul.et_mobile_menu .menu-item-has-children .sub-menu,#main-header ul.et_mobile_menu .menu-item-has-children .sub-menu,.et-db #et-boc .et-l ul.et_mobile_menu .menu-item-has-children .sub-menu,.et-db #main-header ul.et_mobile_menu .menu-item-has-children .sub-menu{display:none!important;visibility:hidden!important}ul.et_mobile_menu .menu-item-has-children .sub-menu.visible,#main-header ul.et_mobile_menu .menu-item-has-children .sub-menu.visible,.et-db #et-boc .et-l ul.et_mobile_menu .menu-item-has-children .sub-menu.visible,.et-db #main-header ul.et_mobile_menu .menu-item-has-children .sub-menu.visible{display:block!important;visibility:visible!important}ul.et_mobile_menu li.menu-item-has-children .mobile-toggle,.et-db #et-boc .et-l ul.et_mobile_menu li.menu-item-has-children .mobile-toggle{text-align:center;opacity:1}ul.et_mobile_menu li.menu-item-has-children .mobile-toggle::after,.et-db #et-boc .et-l ul.et_mobile_menu li.menu-item-has-children .mobile-toggle::after{top:10px;position:relative;font-family:\"ETModules\";content:'\\33';color:#000000;background:#f0f3f6;border-radius:50%;padding:3px}ul.et_mobile_menu li.menu-item-has-children.dt-open>.mobile-toggle::after,.et-db #et-boc .et-l ul.et_mobile_menu li.menu-item-has-children.dt-open>.mobile-toggle::after{content:'\\32'}.et_pb_menu_0.et_pb_menu .et_mobile_menu:after{position:absolute;right:5%;margin-left:-20px;top:-14px;width:0;height:0;content:'';border-left:20px solid transparent;border-right:20px solid transparent;border-bottom:20px solid #ffffff}.mobile_menu_bar{position:relative;display:block;bottom:10px;line-height:0}.et_pb_menu_0.et_pb_menu .et_mobile_menu,.et_pb_menu_0.et_pb_menu .et_mobile_menu ul{background-color:#ffffff!important;border-radius:10px}h2.nwpdcont{color:#FFFFFF;font-family:Arsenal,Helvetica,Arial,Lucida,sans-serif;font-size:35px;line-height:45.5px;font-weight:700}.hustle-layout-content{padding:0px 58px 15px 58px!important}.hustle-layout-form{padding:15px 58px 60px 58px!important}</pre></body></html>",
+    "httpStatus": 200,
+    "httpStatusText": "",
+    "publishedTime": "Tue, 26 Nov 2024 20:44:42 GMT",
+    "title": "",
+    "url": "https://castalia-collections.com/wp-content/et-cache/11/et-core-unified-11.min.css",
+    "usage": {
+      "tokens": 901
+    }
+  },
+  "meta": {
+    "usage": {
+      "tokens": 901
+    }
+  },
+  "status": 20000
+}

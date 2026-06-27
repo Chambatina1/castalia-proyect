@@ -1,0 +1,1048 @@
+     1→'use client'
+     2→
+     3→import { useEffect, useState, useMemo } from 'react'
+     4→import { motion, AnimatePresence } from 'framer-motion'
+     5→import {
+     6→  Building2,
+     7→  Camera,
+     8→  CheckSquare,
+     9→  FileText,
+    10→  Plus,
+    11→  Upload,
+    12→  FileBarChart,
+    13→  AlertTriangle,
+    14→  Search,
+    15→  Filter,
+    16→  Bell,
+    17→  LogOut,
+    18→  ChevronDown,
+    19→  Users,
+    20→  MapPin,
+    21→  Image,
+    22→  Clock,
+    23→  ArrowUpRight,
+    24→  X,
+    25→  TrendingUp,
+    26→} from 'lucide-react'
+    27→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+    28→import { Badge } from '@/components/ui/badge'
+    29→import { Button } from '@/components/ui/button'
+    30→import { Input } from '@/components/ui/input'
+    31→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    32→import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+    33→import { Progress } from '@/components/ui/progress'
+    34→import { ScrollArea } from '@/components/ui/scroll-area'
+    35→import { Skeleton } from '@/components/ui/skeleton'
+    36→import { Separator } from '@/components/ui/separator'
+    37→import { useAppStore } from '@/store/app-store'
+    38→import { useToast } from '@/hooks/use-toast'
+    39→
+    40→// ======================== Types ========================
+    41→
+    42→interface Project {
+    43→  id: string
+    44→  name: string
+    45→  clientName: string
+    46→  address: string
+    47→  city?: string | null
+    48→  status: string
+    49→  priority: string
+    50→  progress: number
+    51→  coverImage?: string | null
+    52→  photoCount?: number
+    53→  taskCount?: number
+    54→  memberAvatars?: { name: string; avatar?: string | null }[]
+    55→  updatedAt: string
+    56→}
+    57→
+    58→interface Activity {
+    59→  id: string
+    60→  userName: string
+    61→  userAvatar?: string | null
+    62→  action: string
+    63→  projectName?: string | null
+    64→  projectId?: string | null
+    65→  createdAt: string
+    66→}
+    67→
+    68→// ======================== Demo Data ========================
+    69→
+    70→const AVATAR_COLORS = [
+    71→  'bg-chart-1 text-white',
+    72→  'bg-chart-2 text-white',
+    73→  'bg-chart-3 text-white',
+    74→  'bg-gold text-navy',
+    75→  'bg-chart-4 text-white',
+    76→]
+    77→
+    78→function getInitials(name: string) {
+    79→  return name
+    80→    .split(' ')
+    81→    .map((w) => w[0])
+    82→    .join('')
+    83→    .toUpperCase()
+    84→    .slice(0, 2)
+    85→}
+    86→
+    87→function getAvatarColor(index: number) {
+    88→  return AVATAR_COLORS[index % AVATAR_COLORS.length]
+    89→}
+    90→
+    91→const DEMO_PROJECTS: Project[] = [
+    92→  {
+    93→    id: '1',
+    94→    name: 'Residencial Los Pinos',
+    95→    clientName: 'Grupo Inmobiliario Sur',
+    96→    address: 'Av. Principal 1450, Providencia',
+    97→    city: 'Santiago',
+    98→    status: 'ACTIVE',
+    99→    priority: 'HIGH',
+   100→    progress: 65,
+   101→    photoCount: 142,
+   102→    taskCount: 28,
+   103→    memberAvatars: [
+   104→      { name: 'María García' },
+   105→      { name: 'Carlos López' },
+   106→      { name: 'Ana Torres' },
+   107→    ],
+   108→    updatedAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+   109→  },
+   110→  {
+   111→    id: '2',
+   112→    name: 'Remodelación Clínica Dental',
+   113→    clientName: 'Dr. Roberto Méndez',
+   114→    address: 'Calle Comercio 320, Centro',
+   115→    city: 'Valparaíso',
+   116→    status: 'ACTIVE',
+   117→    priority: 'MEDIUM',
+   118→    progress: 40,
+   119→    photoCount: 87,
+   120→    taskCount: 15,
+   121→    memberAvatars: [{ name: 'Pedro Sánchez' }, { name: 'Laura Díaz' }],
+   122→    updatedAt: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
+   123→  },
+   124→  {
+   125→    id: '3',
+   126→    name: 'Condominio Vista Mar',
+   127→    clientName: 'Inversiones Mar Azul SpA',
+   128→    address: 'Paseo Costanera 890, Viña del Mar',
+   129→    city: 'Viña del Mar',
+   130→    status: 'ACTIVE',
+   131→    priority: 'URGENT',
+   132→    progress: 82,
+   133→    photoCount: 234,
+   134→    taskCount: 42,
+   135→    memberAvatars: [
+   136→      { name: 'María García' },
+   137→      { name: 'Juan Pérez' },
+   138→      { name: 'Carlos López' },
+   139→      { name: 'Sofía Ruiz' },
+   140→    ],
+   141→    updatedAt: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
+   142→  },
+   143→  {
+   144→    id: '4',
+   145→    name: 'Oficinas Corporativas Tech',
+   146→    clientName: 'TechStart Latam',
+   147→    address: 'Av. Apoquindo 3000, Las Condes',
+   148→    city: 'Santiago',
+   149→    status: 'PAUSED',
+   150→    priority: 'LOW',
+   151→    progress: 25,
+   152→    photoCount: 34,
+   153→    taskCount: 18,
+   154→    memberAvatars: [{ name: 'Ana Torres' }],
+   155→    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+   156→  },
+   157→  {
+   158→    id: '5',
+   159→    name: 'Gimnasio Fitness Center',
+   160→    clientName: 'Salud & Vida Ltda.',
+   161→    address: 'Pasaje Oriente 567, La Reina',
+   162→    city: 'Santiago',
+   163→    status: 'COMPLETED',
+   164→    priority: 'MEDIUM',
+   165→    progress: 100,
+   166→    photoCount: 198,
+   167→    taskCount: 35,
+   168→    memberAvatars: [
+   169→      { name: 'Pedro Sánchez' },
+   170→      { name: 'Carlos López' },
+   171→    ],
+   172→    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
+   173→  },
+   174→  {
+   175→    id: '6',
+   176→    name: 'Restaurante La Terraza',
+   177→    clientName: 'Gastronomía Patagónica',
+   178→    address: 'Av. Bosque Norte 1200, Providencia',
+   179→    city: 'Santiago',
+   180→    status: 'ACTIVE',
+   181→    priority: 'HIGH',
+   182→    progress: 55,
+   183→    photoCount: 76,
+   184→    taskCount: 22,
+   185→    memberAvatars: [
+   186→      { name: 'Laura Díaz' },
+   187→      { name: 'Sofía Ruiz' },
+   188→    ],
+   189→    updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
+   190→  },
+   191→]
+   192→
+   193→const DEMO_ACTIVITIES: Activity[] = [
+   194→  {
+   195→    id: 'a1',
+   196→    userName: 'María García',
+   197→    action: 'subió 3 fotos a',
+   198→    projectName: 'Condominio Vista Mar',
+   199→    projectId: '3',
+   200→    createdAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+   201→  },
+   202→  {
+   203→    id: 'a2',
+   204→    userName: 'Carlos López',
+   205→    action: 'completó tarea "Instalar tuberías" en',
+   206→    projectName: 'Residencial Los Pinos',
+   207→    projectId: '1',
+   208→    createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+   209→  },
+   210→  {
+   211→    id: 'a3',
+   212→    userName: 'Ana Torres',
+   213→    action: 'creó reporte de inspección para',
+   214→    projectName: 'Oficinas Corporativas Tech',
+   215→    projectId: '4',
+   216→    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+   217→  },
+   218→  {
+   219→    id: 'a4',
+   220→    userName: 'Pedro Sánchez',
+   221→    action: 'marcó tarea "Pintar fachada" como urgente en',
+   222→    projectName: 'Restaurante La Terraza',
+   223→    projectId: '6',
+   224→    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
+   225→  },
+   226→  {
+   227→    id: 'a5',
+   228→    userName: 'Laura Díaz',
+   229→    action: 'se unió al proyecto',
+   230→    projectName: 'Remodelación Clínica Dental',
+   231→    projectId: '2',
+   232→    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
+   233→  },
+   234→  {
+   235→    id: 'a6',
+   236→    userName: 'Sofía Ruiz',
+   237→    action: 'comentó en foto "Progreso sala principal" de',
+   238→    projectName: 'Condominio Vista Mar',
+   239→    projectId: '3',
+   240→    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
+   241→  },
+   242→  {
+   243→    id: 'a7',
+   244→    userName: 'Juan Pérez',
+   245→    action: 'actualizó progreso de',
+   246→    projectName: 'Condominio Vista Mar',
+   247→    projectId: '3',
+   248→    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
+   249→  },
+   250→  {
+   251→    id: 'a8',
+   252→    userName: 'María García',
+   253→    action: 'aprobó 5 fotos de',
+   254→    projectName: 'Residencial Los Pinos',
+   255→    projectId: '1',
+   256→    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
+   257→  },
+   258→  {
+   259→    id: 'a9',
+   260→    userName: 'Carlos López',
+   261→    action: 'creó 3 nuevas tareas en',
+   262→    projectName: 'Restaurante La Terraza',
+   263→    projectId: '6',
+   264→    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 18).toISOString(),
+   265→  },
+   266→  {
+   267→    id: 'a10',
+   268→    userName: 'Pedro Sánchez',
+   269→    action: 'envió reporte al cliente de',
+   270→    projectName: 'Gimnasio Fitness Center',
+   271→    projectId: '5',
+   272→    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+   273→  },
+   274→]
+   275→
+   276→function timeAgo(dateStr: string): string {
+   277→  const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000)
+   278→  if (seconds < 60) return 'ahora mismo'
+   279→  const minutes = Math.floor(seconds / 60)
+   280→  if (minutes < 60) return `hace ${minutes} min`
+   281→  const hours = Math.floor(minutes / 60)
+   282→  if (hours < 24) return `hace ${hours}h`
+   283→  const days = Math.floor(hours / 24)
+   284→  return `hace ${days}d`
+   285→}
+   286→
+   287→// ======================== Status / Priority helpers ========================
+   288→
+   289→const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+   290→  ACTIVE: { label: 'Activo', className: 'bg-success/15 text-success border-success/20' },
+   291→  PAUSED: { label: 'Pausado', className: 'bg-warning/15 text-warning border-warning/20' },
+   292→  COMPLETED: { label: 'Completado', className: 'bg-chart-1/15 text-chart-1 border-chart-1/20' },
+   293→  ARCHIVED: { label: 'Archivado', className: 'bg-muted text-muted-foreground border-muted' },
+   294→}
+   295→
+   296→const PRIORITY_CONFIG: Record<string, { label: string; className: string }> = {
+   297→  LOW: { label: 'Baja', className: 'bg-muted text-muted-foreground border-muted' },
+   298→  MEDIUM: { label: 'Media', className: 'bg-gold/15 text-gold-foreground border-gold/20' },
+   299→  HIGH: { label: 'Alta', className: 'bg-warning/15 text-warning border-warning/20' },
+   300→  URGENT: { label: 'Urgente', className: 'bg-destructive/15 text-destructive border-destructive/20' },
+   301→}
+   302→
+   303→const COVER_GRADIENTS = [
+   304→  'from-chart-1/80 to-chart-1/40',
+   305→  'from-gold/80 to-gold/40',
+   306→  'from-chart-3/80 to-chart-3/40',
+   307→  'from-chart-4/80 to-chart-4/40',
+   308→  'from-chart-1/60 to-gold/40',
+   309→  'from-chart-3/60 to-chart-4/40',
+   310→]
+   311→
+   312→// ======================== Main Component ========================
+   313→
+   314→export default function DashboardPage() {
+   315→  const { user, logout, selectProject } = useAppStore()
+   316→  const { toast } = useToast()
+   317→
+   318→  const [projects, setProjects] = useState<Project[]>(DEMO_PROJECTS)
+   319→  const [activities, setActivities] = useState<Activity[]>(DEMO_ACTIVITIES)
+   320→  const [isLoading, setIsLoading] = useState(true)
+   321→  const [stats, setStats] = useState({
+   322→    totalProjects: 0,
+   323→    activeProjects: 0,
+   324→    photosThisWeek: 0,
+   325→    pendingTasks: 0,
+   326→    reportsGenerated: 0,
+   327→    unreadNotifications: 0,
+   328→  })
+   329→
+   330→  // Filter state
+   331→  const [searchQuery, setSearchQuery] = useState('')
+   332→  const [statusFilter, setStatusFilter] = useState('ALL')
+   333→  const [priorityFilter, setPriorityFilter] = useState('ALL')
+   334→  const [managerFilter, setManagerFilter] = useState('ALL')
+   335→  const [activeQuickFilter, setActiveQuickFilter] = useState<string | null>(null)
+   336→
+   337→  // Fetch data on mount
+   338→  useEffect(() => {
+   339→    const fetchData = async () => {
+   340→      setIsLoading(true)
+   341→      try {
+   342→        const [projectsRes, activityRes, tasksRes] = await Promise.allSettled([
+   343→          fetch('/api/projects').then((r) => (r.ok ? r.json() : null)),
+   344→          fetch('/api/activity?limit=10').then((r) => (r.ok ? r.json() : null)),
+   345→          fetch('/api/tasks?status=PENDING').then((r) => (r.ok ? r.json() : null)),
+   346→        ])
+   347→
+   348→        if (projectsRes.status === 'fulfilled' && projectsRes.value) {
+   349→          const data = projectsRes.value
+   350→          if (Array.isArray(data) && data.length > 0) {
+   351→            setProjects(data)
+   352→          }
+   353→        }
+   354→
+   355→        if (activityRes.status === 'fulfilled' && activityRes.value) {
+   356→          const data = activityRes.value
+   357→          if (Array.isArray(data) && data.length > 0) {
+   358→            setActivities(data)
+   359→          }
+   360→        }
+   361→
+   362→        if (tasksRes.status === 'fulfilled' && tasksRes.value) {
+   363→          const data = tasksRes.value
+   364→          if (Array.isArray(data)) {
+   365→            setStats((prev) => ({ ...prev, pendingTasks: data.length }))
+   366→          }
+   367→        }
+   368→      } catch {
+   369→        // Use demo data on error
+   370→      } finally {
+   371→        setIsLoading(false)
+   372→      }
+   373→    }
+   374→
+   375→    fetchData()
+   376→  }, [])
+   377→
+   378→  // Compute stats from projects (fallback to demo data)
+   379→  const computedStats = useMemo(() => {
+   380→    const activeCount = projects.filter((p) => p.status === 'ACTIVE').length
+   381→    const totalPhotos = projects.reduce((sum, p) => sum + (p.photoCount || 0), 0)
+   382→    const totalTasks = projects.reduce((sum, p) => sum + (p.taskCount || 0), 0)
+   383→    const completedProjects = projects.filter((p) => p.status === 'COMPLETED').length
+   384→
+   385→    return {
+   386→      totalProjects: projects.length || 6,
+   387→      activeProjects: activeCount || 4,
+   388→      photosThisWeek: stats.photosThisWeek || Math.floor(totalPhotos * 0.12) || 48,
+   389→      pendingTasks: stats.pendingTasks || Math.floor(totalTasks * 0.3) || 14,
+   390→      reportsGenerated: stats.reportsGenerated || completedProjects + 3 || 8,
+   391→      unreadNotifications: stats.unreadNotifications || 5,
+   392→    }
+   393→  }, [projects, stats])
+   394→
+   395→  // Filter projects
+   396→  const filteredProjects = useMemo(() => {
+   397→    return projects.filter((p) => {
+   398→      if (searchQuery) {
+   399→        const q = searchQuery.toLowerCase()
+   400→        if (
+   401→          !p.name.toLowerCase().includes(q) &&
+   402→          !p.clientName.toLowerCase().includes(q) &&
+   403→          !p.address.toLowerCase().includes(q)
+   404→        )
+   405→          return false
+   406→      }
+   407→      if (statusFilter !== 'ALL' && p.status !== statusFilter) return false
+   408→      if (priorityFilter !== 'ALL' && p.priority !== priorityFilter) return false
+   409→      if (activeQuickFilter === 'no-updates') {
+   410→        const hoursSince = (Date.now() - new Date(p.updatedAt).getTime()) / (1000 * 60 * 60)
+   411→        if (hoursSince < 48) return false
+   412→      }
+   413→      return true
+   414→    })
+   415→  }, [projects, searchQuery, statusFilter, priorityFilter, activeQuickFilter])
+   416→
+   417→  // Get unique manager names from projects
+   418→  const managers = useMemo(() => {
+   419→    const names = new Set<string>()
+   420→    projects.forEach((p) => p.memberAvatars?.forEach((m) => names.add(m.name)))
+   421→    return Array.from(names)
+   422→  }, [projects])
+   423→
+   424→  const filteredByManager = useMemo(() => {
+   425→    if (managerFilter === 'ALL') return filteredProjects
+   426→    return filteredProjects.filter((p) =>
+   427→      p.memberAvatars?.some((m) => m.name === managerFilter)
+   428→    )
+   429→  }, [filteredProjects, managerFilter])
+   430→
+   431→  const handleProjectClick = (project: Project) => {
+   432→    selectProject(project.id)
+   433→    toast({ title: project.name, description: `Abriendo proyecto...` })
+   434→  }
+   435→
+   436→  const handleQuickAction = (action: string) => {
+   437→    toast({ title: 'Acción rápida', description: `${action} — próximamente disponible` })
+   438→  }
+   439→
+   440→  const handleViewAllActivity = () => {
+   441→    toast({ title: 'Actividad', description: 'Ver toda la actividad — próximamente' })
+   442→  }
+   443→
+   444→  // ======================== Render ========================
+   445→
+   446→  if (isLoading) {
+   447→    return <DashboardSkeleton />
+   448→  }
+   449→
+   450→  return (
+   451→    <div className="min-h-screen bg-background">
+   452→      {/* Top Header */}
+   453→      <header className="sticky top-0 z-40 bg-card/80 backdrop-blur-md border-b">
+   454→        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+   455→          <div className="flex items-center gap-3">
+   456→            <div className="w-8 h-8 bg-gold rounded-lg flex items-center justify-center">
+   457→              <Building2 className="w-5 h-5 text-navy" />
+   458→            </div>
+   459→            <div className="hidden sm:block">
+   460→              <h1 className="text-sm font-bold text-foreground leading-tight">Castalia</h1>
+   461→              <p className="text-[10px] text-gold font-semibold tracking-wider uppercase leading-tight">
+   462→                Proyect
+   463→              </p>
+   464→            </div>
+   465→          </div>
+   466→
+   467→          <div className="flex items-center gap-3">
+   468→            {/* Notification bell */}
+   469→            <Button
+   470→              variant="ghost"
+   471→              size="icon"
+   472→              className="relative"
+   473→              onClick={() => toast({ title: 'Notificaciones', description: 'Próximamente' })}
+   474→            >
+   475→              <Bell className="w-5 h-5" />
+   476→              {computedStats.unreadNotifications > 0 && (
+   477→                <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 bg-destructive text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+   478→                  {computedStats.unreadNotifications}
+   479→                </span>
+   480→              )}
+   481→            </Button>
+   482→
+   483→            {/* User menu */}
+   484→            <div className="flex items-center gap-2">
+   485→              <Avatar className="h-8 w-8">
+   486→                <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
+   487→                  {user?.name ? getInitials(user.name) : 'U'}
+   488→                </AvatarFallback>
+   489→              </Avatar>
+   490→              <div className="hidden md:block">
+   491→                <p className="text-sm font-medium text-foreground leading-tight">
+   492→                  {user?.name || 'Usuario'}
+   493→                </p>
+   494→                <p className="text-[11px] text-muted-foreground leading-tight">
+   495→                  {user?.role || 'Empleado'}
+   496→                </p>
+   497→              </div>
+   498→              <Button variant="ghost" size="icon" onClick={logout} className="ml-1" aria-label="Cerrar sesión">
+   499→                <LogOut className="w-4 h-4" />
+   500→              </Button>
+   501→            </div>
+   502→          </div>
+   503→        </div>
+   504→      </header>
+   505→
+   506→      {/* Main Content */}
+   507→      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6">
+   508→        {/* Page title */}
+   509→        <motion.div
+   510→          initial={{ opacity: 0, y: -10 }}
+   511→          animate={{ opacity: 1, y: 0 }}
+   512→          transition={{ duration: 0.4 }}
+   513→          className="mb-6"
+   514→        >
+   515→          <h2 className="text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h2>
+   516→          <p className="text-muted-foreground text-sm mt-1">
+   517→            Resumen general de tus proyectos y actividad reciente
+   518→          </p>
+   519→        </motion.div>
+   520→
+   521→        {/* Stats Row */}
+   522→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+   523→          {[
+   524→            {
+   525→              label: 'Total Proyectos',
+   526→              value: computedStats.totalProjects,
+   527→              sub: `${computedStats.activeProjects} activos`,
+   528→              icon: Building2,
+   529→              color: 'bg-primary/10 text-primary',
+   530→              trend: '+2 este mes',
+   531→            },
+   532→            {
+   533→              label: 'Fotos esta semana',
+   534→              value: computedStats.photosThisWeek,
+   535→              sub: '+12% vs semana anterior',
+   536→              icon: Camera,
+   537→              color: 'bg-chart-2/15 text-chart-2',
+   538→              trend: '+12%',
+   539→            },
+   540→            {
+   541→              label: 'Tareas pendientes',
+   542→              value: computedStats.pendingTasks,
+   543→              sub: computedStats.pendingTasks > 0 ? 'Requieren atención' : '¡Todo al día!',
+   544→              icon: CheckSquare,
+   545→              color: computedStats.pendingTasks > 0 ? 'bg-warning/15 text-warning' : 'bg-success/15 text-success',
+   546→              trend: computedStats.pendingTasks > 0 ? `${computedStats.pendingTasks} por hacer` : 'Sin pendientes',
+   547→              highlight: computedStats.pendingTasks > 0,
+   548→            },
+   549→            {
+   550→              label: 'Reportes generados',
+   551→              value: computedStats.reportsGenerated,
+   552→              sub: '+3 este mes',
+   553→              icon: FileText,
+   554→              color: 'bg-chart-3/15 text-chart-3',
+   555→              trend: '+3',
+   556→            },
+   557→          ].map((stat, i) => (
+   558→            <motion.div
+   559→              key={stat.label}
+   560→              initial={{ opacity: 0, y: 20 }}
+   561→              animate={{ opacity: 1, y: 0 }}
+   562→              transition={{ duration: 0.4, delay: i * 0.08 }}
+   563→            >
+   564→              <Card
+   565→                className={`relative overflow-hidden ${stat.highlight ? 'ring-2 ring-warning/30' : ''}`}
+   566→              >
+   567→                <CardContent className="p-4 sm:p-5">
+   568→                  <div className="flex items-start justify-between mb-3">
+   569→                    <div className={`p-2.5 rounded-xl ${stat.color}`}>
+   570→                      <stat.icon className="w-5 h-5" />
+   571→                    </div>
+   572→                    <div className="flex items-center gap-1 text-xs text-success font-medium">
+   573→                      <TrendingUp className="w-3 h-3" />
+   574→                      {stat.trend}
+   575→                    </div>
+   576→                  </div>
+   577→                  <div className="text-2xl sm:text-3xl font-bold text-foreground">{stat.value}</div>
+   578→                  <p className="text-sm font-medium text-foreground/80 mt-0.5">{stat.label}</p>
+   579→                  <p className="text-xs text-muted-foreground mt-1">{stat.sub}</p>
+   580→                </CardContent>
+   581→              </Card>
+   582→            </motion.div>
+   583→          ))}
+   584→        </div>
+   585→
+   586→        {/* Quick Actions Bar */}
+   587→        <motion.div
+   588→          initial={{ opacity: 0, y: 20 }}
+   589→          animate={{ opacity: 1, y: 0 }}
+   590→          transition={{ duration: 0.4, delay: 0.35 }}
+   591→          className="mb-6"
+   592→        >
+   593→          <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+   594→            {[
+   595→              {
+   596→                label: 'Nuevo Proyecto',
+   597→                icon: Plus,
+   598→                variant: 'default' as const,
+   599→                className: 'bg-gold text-gold-foreground hover:bg-gold/90 shadow-sm',
+   600→                action: 'Nuevo Proyecto',
+   601→              },
+   602→              {
+   603→                label: 'Subir Foto',
+   604→                icon: Upload,
+   605→                variant: 'outline' as const,
+   606→                className: '',
+   607→                action: 'Subir Foto',
+   608→              },
+   609→              {
+   610→                label: 'Crear Reporte',
+   611→                icon: FileBarChart,
+   612→                variant: 'outline' as const,
+   613→                className: '',
+   614→                action: 'Crear Reporte Rápido',
+   615→              },
+   616→              {
+   617→                label: 'Marcar Urgencia',
+   618→                icon: AlertTriangle,
+   619→                variant: 'destructive' as const,
+   620→                className: '',
+   621→                action: 'Marcar Issue Urgente',
+   622→              },
+   623→            ].map((btn) => (
+   624→              <Button
+   625→                key={btn.label}
+   626→                variant={btn.variant}
+   627→                size="sm"
+   628→                className={`shrink-0 gap-2 ${btn.className}`}
+   629→                onClick={() => handleQuickAction(btn.action)}
+   630→              >
+   631→                <btn.icon className="w-4 h-4" />
+   632→                <span className="hidden sm:inline">{btn.label}</span>
+   633→              </Button>
+   634→            ))}
+   635→          </div>
+   636→        </motion.div>
+   637→
+   638→        {/* Filter Bar */}
+   639→        <motion.div
+   640→          initial={{ opacity: 0, y: 20 }}
+   641→          animate={{ opacity: 1, y: 0 }}
+   642→          transition={{ duration: 0.4, delay: 0.4 }}
+   643→          className="mb-6"
+   644→        >
+   645→          <Card className="py-4">
+   646→            <CardContent className="px-4 sm:px-5">
+   647→              <div className="flex flex-col gap-3">
+   648→                {/* Main filters row */}
+   649→                <div className="flex flex-col sm:flex-row gap-2">
+   650→                  <div className="relative flex-1">
+   651→                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   652→                    <Input
+   653→                      placeholder="Buscar proyectos, clientes, dirección..."
+   654→                      value={searchQuery}
+   655→                      onChange={(e) => setSearchQuery(e.target.value)}
+   656→                      className="pl-9 h-9"
+   657→                    />
+   658→                    {searchQuery && (
+   659→                      <button
+   660→                        onClick={() => setSearchQuery('')}
+   661→                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+   662→                      >
+   663→                        <X className="w-4 h-4" />
+   664→                      </button>
+   665→                    )}
+   666→                  </div>
+   667→
+   668→                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+   669→                    <SelectTrigger className="w-full sm:w-[150px] h-9">
+   670→                      <SelectValue placeholder="Estado" />
+   671→                    </SelectTrigger>
+   672→                    <SelectContent>
+   673→                      <SelectItem value="ALL">Todos los estados</SelectItem>
+   674→                      <SelectItem value="ACTIVE">Activo</SelectItem>
+   675→                      <SelectItem value="PAUSED">Pausado</SelectItem>
+   676→                      <SelectItem value="COMPLETED">Completado</SelectItem>
+   677→                      <SelectItem value="ARCHIVED">Archivado</SelectItem>
+   678→                    </SelectContent>
+   679→                  </Select>
+   680→
+   681→                  <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+   682→                    <SelectTrigger className="w-full sm:w-[140px] h-9">
+   683→                      <SelectValue placeholder="Prioridad" />
+   684→                    </SelectTrigger>
+   685→                    <SelectContent>
+   686→                      <SelectItem value="ALL">Todas</SelectItem>
+   687→                      <SelectItem value="LOW">Baja</SelectItem>
+   688→                      <SelectItem value="MEDIUM">Media</SelectItem>
+   689→                      <SelectItem value="HIGH">Alta</SelectItem>
+   690→                      <SelectItem value="URGENT">Urgente</SelectItem>
+   691→                    </SelectContent>
+   692→                  </Select>
+   693→
+   694→                  <Select value={managerFilter} onValueChange={setManagerFilter}>
+   695→                    <SelectTrigger className="w-full sm:w-[170px] h-9">
+   696→                      <SelectValue placeholder="Responsable" />
+   697→                    </SelectTrigger>
+   698→                    <SelectContent>
+   699→                      <SelectItem value="ALL">Todos</SelectItem>
+   700→                      {managers.map((m) => (
+   701→                        <SelectItem key={m} value={m}>
+   702→                          {m}
+   703→                        </SelectItem>
+   704→                      ))}
+   705→                    </SelectContent>
+   706→                  </Select>
+   707→
+   708→                  <Button
+   709→                    variant="outline"
+   710→                    size="sm"
+   711→                    className="h-9 gap-1.5 shrink-0 hidden lg:inline-flex"
+   712→                    onClick={() => toast({ title: 'Fechas', description: 'Selector de rango de fechas próximamente' })}
+   713→                  >
+   714→                    <Clock className="w-3.5 h-3.5" />
+   715→                    Fecha
+   716→                    <ChevronDown className="w-3 h-3" />
+   717→                  </Button>
+   718→                </div>
+   719→
+   720→                {/* Quick filter chips */}
+   721→                <div className="flex flex-wrap gap-2">
+   722→                  {[
+   723→                    { id: 'unreviewed', label: 'Fotos sin revisar', icon: Image },
+   724→                    { id: 'overdue', label: 'Tareas vencidas', icon: AlertTriangle },
+   725→                    { id: 'no-updates', label: 'Sin actualizaciones', icon: Clock },
+   726→                  ].map((chip) => (
+   727→                    <button
+   728→                      key={chip.id}
+   729→                      onClick={() =>
+   730→                        setActiveQuickFilter(activeQuickFilter === chip.id ? null : chip.id)
+   731→                      }
+   732→                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200 ${
+   733→                        activeQuickFilter === chip.id
+   734→                          ? 'bg-primary text-primary-foreground border-primary'
+   735→                          : 'bg-background text-muted-foreground border-border hover:border-primary/30 hover:text-foreground'
+   736→                      }`}
+   737→                    >
+   738→                      <chip.icon className="w-3 h-3" />
+   739→                      {chip.label}
+   740→                      {activeQuickFilter === chip.id && <X className="w-3 h-3 ml-0.5" />}
+   741→                    </button>
+   742→                  ))}
+   743→                </div>
+   744→              </div>
+   745→            </CardContent>
+   746→          </Card>
+   747→        </motion.div>
+   748→
+   749→        {/* Main grid: Projects + Activity Feed */}
+   750→        <div className="flex flex-col lg:flex-row gap-6">
+   751→          {/* Projects Grid */}
+   752→          <div className="flex-1 min-w-0">
+   753→            <div className="flex items-center justify-between mb-4">
+   754→              <h3 className="text-lg font-semibold text-foreground">
+   755→                Proyectos
+   756→                <span className="text-sm font-normal text-muted-foreground ml-2">
+   757→                  ({filteredByManager.length})
+   758→                </span>
+   759→              </h3>
+   760→            </div>
+   761→
+   762→            {filteredByManager.length === 0 ? (
+   763→              <Card>
+   764→                <CardContent className="p-12 text-center">
+   765→                  <Building2 className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+   766→                  <p className="text-muted-foreground font-medium">No se encontraron proyectos</p>
+   767→                  <p className="text-sm text-muted-foreground/70 mt-1">
+   768→                    Intenta ajustar los filtros de búsqueda
+   769→                  </p>
+   770→                </CardContent>
+   771→              </Card>
+   772→            ) : (
+   773→              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+   774→                <AnimatePresence mode="popLayout">
+   775→                  {filteredByManager.map((project, i) => {
+   776→                    const statusCfg = STATUS_CONFIG[project.status] || STATUS_CONFIG.ACTIVE
+   777→                    const priorityCfg = PRIORITY_CONFIG[project.priority] || PRIORITY_CONFIG.MEDIUM
+   778→                    const gradientClass = COVER_GRADIENTS[i % COVER_GRADIENTS.length]
+   779→
+   780→                    return (
+   781→                      <motion.div
+   782→                        key={project.id}
+   783→                        layout
+   784→                        initial={{ opacity: 0, scale: 0.95 }}
+   785→                        animate={{ opacity: 1, scale: 1 }}
+   786→                        exit={{ opacity: 0, scale: 0.95 }}
+   787→                        transition={{ duration: 0.3, delay: i * 0.04 }}
+   788→                      >
+   789→                        <Card
+   790→                          className="group cursor-pointer overflow-hidden hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 hover:-translate-y-0.5"
+   791→                          onClick={() => handleProjectClick(project)}
+   792→                        >
+   793→                          {/* Cover */}
+   794→                          <div
+   795→                            className={`relative h-36 bg-gradient-to-br ${gradientClass} overflow-hidden`}
+   796→                          >
+   797→                            {/* Decorative grid */}
+   798→                            <div
+   799→                              className="absolute inset-0 opacity-10"
+   800→                              style={{
+   801→                                backgroundImage:
+   802→                                  'linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px)',
+   803→                                backgroundSize: '24px 24px',
+   804→                              }}
+   805→                            />
+   806→                            {/* Building icon */}
+   807→                            <div className="absolute inset-0 flex items-center justify-center">
+   808→                              <Building2 className="w-16 h-16 text-white/20" />
+   809→                            </div>
+   810→                            {/* Status + Priority badges */}
+   811→                            <div className="absolute top-3 left-3 flex gap-1.5">
+   812→                              <Badge variant="outline" className={statusCfg.className}>
+   813→                                {statusCfg.label}
+   814→                              </Badge>
+   815→                            </div>
+   816→                            <div className="absolute top-3 right-3">
+   817→                              <Badge variant="outline" className={priorityCfg.className}>
+   818→                                {priorityCfg.label}
+   819→                              </Badge>
+   820→                            </div>
+   821→                          </div>
+   822→
+   823→                          <CardContent className="p-4 space-y-3">
+   824→                            {/* Project name */}
+   825→                            <h4 className="font-semibold text-foreground text-sm leading-tight line-clamp-1 group-hover:text-primary transition-colors">
+   826→                              {project.name}
+   827→                            </h4>
+   828→
+   829→                            {/* Client & Address */}
+   830→                            <div className="space-y-1">
+   831→                              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+   832→                                <Users className="w-3 h-3 shrink-0" />
+   833→                                <span className="truncate">{project.clientName}</span>
+   834→                              </p>
+   835→                              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+   836→                                <MapPin className="w-3 h-3 shrink-0" />
+   837→                                <span className="truncate">{project.address}</span>
+   838→                              </p>
+   839→                            </div>
+   840→
+   841→                            {/* Progress */}
+   842→                            <div className="space-y-1.5">
+   843→                              <div className="flex items-center justify-between text-xs">
+   844→                                <span className="text-muted-foreground">Progreso</span>
+   845→                                <span className="font-medium text-foreground">{project.progress}%</span>
+   846→                              </div>
+   847→                              <Progress value={project.progress} className="h-1.5" />
+   848→                            </div>
+   849→
+   850→                            {/* Footer: avatars + counts */}
+   851→                            <Separator className="my-0" />
+   852→                            <div className="flex items-center justify-between pt-1">
+   853→                              {/* Stacked avatars */}
+   854→                              <div className="flex -space-x-2">
+   855→                                {project.memberAvatars?.slice(0, 4).map((member, mi) => (
+   856→                                  <Avatar key={mi} className="w-6 h-6 border-2 border-card">
+   857→                                    <AvatarFallback
+   858→                                      className={`${getAvatarColor(mi)} text-[9px] font-semibold`}
+   859→                                    >
+   860→                                      {getInitials(member.name)}
+   861→                                    </AvatarFallback>
+   862→                                  </Avatar>
+   863→                                ))}
+   864→                                {(project.memberAvatars?.length || 0) > 4 && (
+   865→                                  <div className="w-6 h-6 rounded-full bg-muted border-2 border-card flex items-center justify-center">
+   866→                                    <span className="text-[9px] font-medium text-muted-foreground">
+   867→                                      +{((project.memberAvatars?.length || 0) - 4)}
+   868→                                    </span>
+   869→                                  </div>
+   870→                                )}
+   871→                              </div>
+   872→
+   873→                              {/* Counts */}
+   874→                              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+   875→                                <span className="flex items-center gap-1">
+   876→                                  <Camera className="w-3 h-3" />
+   877→                                  {project.photoCount || 0}
+   878→                                </span>
+   879→                                <span className="flex items-center gap-1">
+   880→                                  <CheckSquare className="w-3 h-3" />
+   881→                                  {project.taskCount || 0}
+   882→                                </span>
+   883→                              </div>
+   884→                            </div>
+   885→                          </CardContent>
+   886→                        </Card>
+   887→                      </motion.div>
+   888→                    )
+   889→                  })}
+   890→                </AnimatePresence>
+   891→              </div>
+   892→            )}
+   893→          </div>
+   894→
+   895→          {/* Activity Feed (sidebar) */}
+   896→          <div className="w-full lg:w-80 xl:w-96 shrink-0">
+   897→            <Card className="lg:sticky lg:top-24">
+   898→              <CardHeader className="pb-3">
+   899→                <div className="flex items-center justify-between">
+   900→                  <CardTitle className="text-base">Actividad reciente</CardTitle>
+   901→                  <Button
+   902→                    variant="ghost"
+   903→                    size="sm"
+   904→                    className="text-xs text-gold hover:text-gold/80 gap-1 h-7"
+   905→                    onClick={handleViewAllActivity}
+   906→                  >
+   907→                    Ver todo
+   908→                    <ArrowUpRight className="w-3 h-3" />
+   909→                  </Button>
+   910→                </div>
+   911→              </CardHeader>
+   912→              <CardContent className="px-4 pb-4">
+   913→                <ScrollArea className="max-h-[520px]">
+   914→                  <div className="space-y-1">
+   915→                    {activities.map((activity, i) => (
+   916→                      <motion.div
+   917→                        key={activity.id}
+   918→                        initial={{ opacity: 0, x: 20 }}
+   919→                        animate={{ opacity: 1, x: 0 }}
+   920→                        transition={{ duration: 0.3, delay: i * 0.04 }}
+   921→                        className="flex gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors group cursor-pointer"
+   922→                        onClick={() => {
+   923→                          if (activity.projectId) {
+   924→                            selectProject(activity.projectId)
+   925→                            toast({
+   926→                              title: activity.projectName || 'Proyecto',
+   927→                              description: 'Abriendo proyecto...',
+   928→                            })
+   929→                          }
+   930→                        }}
+   931→                      >
+   932→                        <Avatar className="w-8 h-8 shrink-0 mt-0.5">
+   933→                          <AvatarFallback
+   934→                            className={`${getAvatarColor(i)} text-[10px] font-semibold`}
+   935→                          >
+   936→                            {getInitials(activity.userName)}
+   937→                          </AvatarFallback>
+   938→                        </Avatar>
+   939→                        <div className="min-w-0 flex-1">
+   940→                          <p className="text-sm text-foreground leading-snug">
+   941→                            <span className="font-medium">{activity.userName}</span>{' '}
+   942→                            <span className="text-muted-foreground">{activity.action}</span>
+   943→                            {activity.projectName && (
+   944→                              <span className="font-medium text-primary group-hover:underline">
+   945→                                {' '}
+   946→                                {activity.projectName}
+   947→                              </span>
+   948→                            )}
+   949→                          </p>
+   950→                          <p className="text-[11px] text-muted-foreground mt-0.5">
+   951→                            {timeAgo(activity.createdAt)}
+   952→                          </p>
+   953→                        </div>
+   954→                      </motion.div>
+   955→                    ))}
+   956→                  </div>
+   957→                </ScrollArea>
+   958→              </CardContent>
+   959→            </Card>
+   960→          </div>
+   961→        </div>
+   962→      </main>
+   963→    </div>
+   964→  )
+   965→}
+   966→
+   967→// ======================== Skeleton ========================
+   968→
+   969→function DashboardSkeleton() {
+   970→  return (
+   971→    <div className="min-h-screen bg-background">
+   972→      {/* Header skeleton */}
+   973→      <header className="sticky top-0 z-40 bg-card/80 backdrop-blur-md border-b">
+   974→        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+   975→          <div className="flex items-center gap-3">
+   976→            <Skeleton className="w-8 h-8 rounded-lg" />
+   977→            <Skeleton className="w-16 h-4" />
+   978→          </div>
+   979→          <div className="flex items-center gap-3">
+   980→            <Skeleton className="w-8 h-8 rounded-full" />
+   981→            <Skeleton className="w-8 h-8 rounded-full" />
+   982→          </div>
+   983→        </div>
+   984→      </header>
+   985→
+   986→      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6">
+   987→        <Skeleton className="w-48 h-8 mb-2" />
+   988→        <Skeleton className="w-64 h-4 mb-6" />
+   989→
+   990→        {/* Stats skeleton */}
+   991→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+   992→          {Array.from({ length: 4 }).map((_, i) => (
+   993→            <Card key={i}>
+   994→              <CardContent className="p-5">
+   995→                <div className="flex justify-between mb-3">
+   996→                  <Skeleton className="w-10 h-10 rounded-xl" />
+   997→                  <Skeleton className="w-16 h-4" />
+   998→                </div>
+   999→                <Skeleton className="w-16 h-8 mb-1" />
+  1000→                <Skeleton className="w-24 h-3" />
+  1001→              </CardContent>
+  1002→            </Card>
+  1003→          ))}
+  1004→        </div>
+  1005→
+  1006→        {/* Actions skeleton */}
+  1007→        <div className="flex gap-2 mb-6">
+  1008→          {Array.from({ length: 4 }).map((_, i) => (
+  1009→            <Skeleton key={i} className="w-32 h-9 rounded-md" />
+  1010→          ))}
+  1011→        </div>
+  1012→
+  1013→        {/* Filter skeleton */}
+  1014→        <Card className="mb-6">
+  1015→          <CardContent className="p-4">
+  1016→            <div className="flex gap-2">
+  1017→              <Skeleton className="h-9 flex-1" />
+  1018→              <Skeleton className="h-9 w-[150px]" />
+  1019→              <Skeleton className="h-9 w-[140px]" />
+  1020→            </div>
+  1021→          </CardContent>
+  1022→        </Card>
+  1023→
+  1024→        {/* Grid skeleton */}
+  1025→        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+  1026→          {Array.from({ length: 6 }).map((_, i) => (
+  1027→            <Card key={i}>
+  1028→              <Skeleton className="h-36 rounded-t-xl" />
+  1029→              <CardContent className="p-4 space-y-3">
+  1030→                <Skeleton className="w-3/4 h-4" />
+  1031→                <Skeleton className="w-full h-3" />
+  1032→                <Skeleton className="w-2/3 h-3" />
+  1033→                <Skeleton className="w-full h-1.5 rounded-full" />
+  1034→                <div className="flex justify-between">
+  1035→                  <div className="flex -space-x-2">
+  1036→                    <Skeleton className="w-6 h-6 rounded-full border-2 border-card" />
+  1037→                    <Skeleton className="w-6 h-6 rounded-full border-2 border-card" />
+  1038→                  </div>
+  1039→                  <Skeleton className="w-20 h-3" />
+  1040→                </div>
+  1041→              </CardContent>
+  1042→            </Card>
+  1043→          ))}
+  1044→        </div>
+  1045→      </main>
+  1046→    </div>
+  1047→  )
+  1048→}
