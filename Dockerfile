@@ -53,8 +53,8 @@ COPY --from=builder /app/public ./public
 # Copy initialized database as template
 COPY --from=builder /app/prisma/custom.db /app/template.db
 
-# Persistent data directory for SQLite
-RUN mkdir -p /data && chown -R nextjs:nodejs /data /app/template.db
+# Persistent data directory for SQLite + uploads
+RUN mkdir -p /data/uploads && chown -R nextjs:nodejs /data /app/template.db
 
 USER nextjs
 EXPOSE 10000
