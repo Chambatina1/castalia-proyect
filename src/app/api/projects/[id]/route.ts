@@ -166,7 +166,7 @@ export async function PUT(
   }
 }
 
-// DELETE /api/projects/[id] - Archive project (set status to ARCHIVED)
+// DELETE /api/projects/[id] - Permanently delete project and all related data
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -182,24 +182,16 @@ export async function DELETE(
       );
     }
 
-    const project = await db.project.update({
-      where: { id },
-      data: { status: 'ARCHIVED' },
-      include: {
-        creator: {
-          select: { id: true, name: true, avatar: true },
-        },
-      },
-    });
+    // Cascade deletes: members, photos, tasks, chatMessages, reports, activityLogs, internalNotes, clientShares
+    await db.project.delete({ where: { id } });
 
     return NextResponse.json({
-      project,
-      message: 'Project archived successfully',
+      message: 'Proyecto eliminado correctamente',
     });
   } catch (error) {
-    console.error('Archive project error:', error);
+    console.error('Delete project error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: String(error) },
       { status: 500 }
     );
   }

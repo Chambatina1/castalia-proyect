@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Building2, Camera, CheckSquare, FileText, Plus, Upload, AlertTriangle, Search, Bell, LogOut, MapPin, Image, Clock, ArrowUpRight, X, LayoutDashboard, MessageSquare, FileBarChart, Users, Settings, ChevronRight, Menu, TrendingUp, FolderKanban,
+  Building2, Camera, CheckSquare, FileText, Plus, Upload, AlertTriangle, Search, Bell, LogOut, MapPin, Image, Clock, ArrowUpRight, X, LayoutDashboard, MessageSquare, FileBarChart, Users, Settings, ChevronRight, Menu, TrendingUp, FolderKanban, Trash2,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -56,6 +56,8 @@ export default function DashboardPage() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [expandedStat, setExpandedStat] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<ApiProject | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const loadData = useCallback(async () => {
     try {
@@ -73,6 +75,22 @@ export default function DashboardPage() {
     } catch {}
     setLoading(false)
   }, [])
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/projects/${deleteTarget.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error()
+ toast({ title: 'Proyecto eliminado', description: deleteTarget.name })
+      setProjects(prev => prev.filter(p => p.id !== deleteTarget.id))
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo eliminar', variant: 'destructive' })
+    } finally {
+      setDeleting(false)
+      setDeleteTarget(null)
+    }
+  }
 
   useEffect(() => {
     if (currentUser) loadData()
@@ -338,9 +356,9 @@ export default function DashboardPage() {
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.25, delay: i * 0.04 }}
                 >
-                  <button onClick={() => navigateTo('project-detail', project.id)}
-                    className="w-full text-left rounded-2xl overflow-hidden border bg-white hover:shadow-lg transition-all duration-300 group"
+                  <div className="relative rounded-2xl overflow-hidden border bg-white hover:shadow-lg transition-all duration-300 group"
                     style={{ borderColor: '#E8EBF0' }}>
+                    <div className="cursor-pointer" onClick={() => navigateTo('project-detail', project.id)}>
                     {/* Cover */}
                     <div className="relative h-[160px] overflow-hidden"
                       style={{ background: project.coverImage ? undefined : `linear-gradient(135deg, #1A2332 0%, #2DA194 100%)` }}>
@@ -362,6 +380,12 @@ export default function DashboardPage() {
                           </span>
                         )}
                       </div>
+                      {/* Delete button - top right of cover */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(project) }}
+                        className="absolute top-3 right-3 h-8 w-8 rounded-lg flex items-center justify-center sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-sm hover:!bg-red-500/80">
+                        <Trash2 className="w-3.5 h-3.5 text-white" />
+                      </button>
                       <div className="absolute bottom-3 right-3">
                         <span className="text-[12px] font-medium px-2 py-1 rounded-md bg-black/40 text-white backdrop-blur-sm">
                           {project.progress}%
@@ -417,7 +441,8 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     </div>
-                  </button>
+                    </div>
+                  </div>
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -545,6 +570,45 @@ export default function DashboardPage() {
       </Sheet>
 
       <CreateProjectModal open={showCreateProject} onClose={() => setShowCreateProject(false)} onCreated={() => loadData()} />
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setDeleteTarget(null)} />
+          <div className="relative w-[340px] bg-white rounded-2xl overflow-hidden shadow-xl">
+            <div className="p-6 text-center">
+              <div className="w-14 h-14 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: '#FEE2E2' }}>
+                <Trash2 className="w-6 h-6 text-red-500" />
+              </div>
+              <h3 className="text-[17px] font-bold mb-1.5" style={{ color: '#1A2332' }}>Eliminar proyecto</h3>
+              <p className="text-[14px] leading-relaxed" style={{ color: '#5D7380' }}>
+                Vas a eliminar <span className="font-semibold" style={{ color: '#1A2332' }}>{deleteTarget.name}</span> y toda su información (fotos, tareas, reportes). Esta acción no se puede deshacer.
+              </p>
+            </div>
+            <div className="flex border-t" style={{ borderColor: '#E8EBF0' }}>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="flex-1 h-12 text-[14px] font-semibold border-r"
+                style={{ color: '#5D7380', borderColor: '#E8EBF0' }}>
+                Cancelar
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 h-12 text-[14px] font-semibold text-white flex items-center justify-center gap-2 disabled:opacity-50"
+                style={{ background: '#DC2626' }}>
+                {deleting ? (
+                  <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mobile FAB */}
       {isManagerOrAdmin() && (
