@@ -238,11 +238,13 @@ export default function ProjectDetailPage() {
       fd.append('uploadedBy', currentUser?.id || '')
       fd.append('fase', fase)
       fd.append('tags', JSON.stringify([fase]))
+      if (selectedSubId) fd.append('subProductId', selectedSubId)
 
       const res = await fetch('/api/photos', { method: 'POST', body: fd })
       if (!res.ok) throw new Error()
       toast({ title: `${files.length} foto(s) subida(s)`, description: fase === 'antes' ? 'ANTES' : 'DESPUÉS' })
       await loadPhotos()
+      await loadSubProducts()
     } catch {
       toast({ title: 'Error al subir fotos', variant: 'destructive' })
     } finally {
@@ -484,157 +486,192 @@ export default function ProjectDetailPage() {
           </div>
         </div>
 
-        {/* Quick Phase Upload Buttons */}
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <button onClick={() => { setPendingPhase('antes'); cameraRef.current?.click() }} disabled={uploading}
-            className="rounded-2xl p-4 text-center border-2 transition-all disabled:opacity-50 active:scale-[0.97]"
-            style={{ borderColor: '#F0A030', background: 'linear-gradient(135deg, #FFF7ED, #FFEDD5)' }}>
-            <div className="flex items-center justify-center gap-2 mb-0.5">
-              <Camera className="w-5 h-5" style={{ color: '#F0A030' }} />
-              <span className="text-[15px] font-bold" style={{ color: '#92400E' }}>ANTES</span>
-            </div>
-            <p className="text-[11px]" style={{ color: '#B45309' }}>Tomar foto o elegir de galería</p>
-          </button>
-
-          <button onClick={() => { setPendingPhase('despues'); cameraRef.current?.click() }} disabled={uploading}
-            className="rounded-2xl p-4 text-center border-2 transition-all disabled:opacity-50 active:scale-[0.97]"
-            style={{ borderColor: '#2DA194', background: 'linear-gradient(135deg, #F0FDFA, #CCFBF1)' }}>
-            <div className="flex items-center justify-center gap-2 mb-0.5">
-              <Camera className="w-5 h-5" style={{ color: '#2DA194' }} />
-              <span className="text-[15px] font-bold" style={{ color: '#115E59' }}>DESPUÉS</span>
-            </div>
-            <p className="text-[11px]" style={{ color: '#0F766E' }}>Tomar foto o elegir de galería</p>
-          </button>
-        </div>
-
-        {/* Gallery upload buttons (secondary) */}
-        <div className="flex gap-2 mb-4">
-          <button onClick={() => { setPendingPhase('antes'); galleryRef.current?.click() }} disabled={uploading}
-            className="flex-1 h-9 rounded-lg text-[12px] font-semibold border flex items-center justify-center gap-1.5 disabled:opacity-50"
-            style={{ borderColor: '#F0A030', color: '#92400E', background: '#FFFBF5' }}>
-            <ImagePlus className="w-3.5 h-3.5" /> Galería ANTES
-          </button>
-          <button onClick={() => { setPendingPhase('despues'); galleryRef.current?.click() }} disabled={uploading}
-            className="flex-1 h-9 rounded-lg text-[12px] font-semibold border flex items-center justify-center gap-1.5 disabled:opacity-50"
-            style={{ borderColor: '#2DA194', color: '#115E59', background: '#F7FDFC' }}>
-            <ImagePlus className="w-3.5 h-3.5" /> Galería DESPUÉS
-          </button>
-          {selectMode && (
-            <button onClick={selectedIds.size > 0 ? downloadSelected : () => { setSelectMode(false); setSelectedIds(new Set()) }}
-              className="h-9 px-4 rounded-lg text-[12px] font-bold text-white flex items-center gap-1.5 shrink-0"
-              style={{ background: selectedIds.size > 0 ? '#38C5B5' : '#6B7280' }}>
-              <Download className="w-3.5 h-3.5" />
-              {selectedIds.size > 0 ? `Descargar ${selectedIds.size}` : 'Cancelar'}
+        {/* Quick Phase Upload Buttons — only inside a category */}
+        {selectedSubId && (
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            <button onClick={() => { setPendingPhase('antes'); cameraRef.current?.click() }} disabled={uploading}
+              className="rounded-2xl p-4 text-center border-2 transition-all disabled:opacity-50 active:scale-[0.97]"
+              style={{ borderColor: '#F0A030', background: 'linear-gradient(135deg, #FFF7ED, #FFEDD5)' }}>
+              <div className="flex items-center justify-center gap-2 mb-0.5">
+                <Camera className="w-5 h-5" style={{ color: '#F0A030' }} />
+                <span className="text-[15px] font-bold" style={{ color: '#92400E' }}>ANTES</span>
+              </div>
+              <p className="text-[11px]" style={{ color: '#B45309' }}>Tomar foto o elegir de galería</p>
             </button>
-          )}
-        </div>
-
-        {/* ─── SubProductos Section ─── */}
-        <div className="mb-6 rounded-xl border overflow-hidden" style={{ borderColor: '#E2E6EB', background: '#FFFFFF' }}>
-          <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: '#EDF0F4' }}>
-            <div className="flex items-center gap-2">
-              <FolderOpen className="w-4 h-4" style={{ color: '#38C5B5' }} />
-              <span className="text-[13px] font-bold" style={{ color: '#1A2332' }}>Subproductos</span>
-              {subProducts.length > 0 && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-md font-bold" style={{ background: '#F0FDFA', color: '#38C5B5' }}>{subProducts.length}</span>
-              )}
-            </div>
-            <button onClick={() => setShowNewSub(!showNewSub)} className="flex items-center gap-1 h-7 px-2.5 rounded-lg text-[11px] font-semibold border transition-colors"
-              style={{ borderColor: '#E2E6EB', color: '#38C5B5', background: showNewSub ? '#F0FDFA' : 'white' }}>
-              <Plus className="w-3 h-3" /> Nuevo
+            <button onClick={() => { setPendingPhase('despues'); cameraRef.current?.click() }} disabled={uploading}
+              className="rounded-2xl p-4 text-center border-2 transition-all disabled:opacity-50 active:scale-[0.97]"
+              style={{ borderColor: '#2DA194', background: 'linear-gradient(135deg, #F0FDFA, #CCFBF1)' }}>
+              <div className="flex items-center justify-center gap-2 mb-0.5">
+                <Camera className="w-5 h-5" style={{ color: '#2DA194' }} />
+                <span className="text-[15px] font-bold" style={{ color: '#115E59' }}>DESPUÉS</span>
+              </div>
+              <p className="text-[11px]" style={{ color: '#0F766E' }}>Tomar foto o elegir de galería</p>
             </button>
           </div>
+        )}
 
-          {/* New subproduct input */}
-          <AnimatePresence>
-            {showNewSub && (
-              <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden border-b" style={{ borderColor: '#EDF0F4' }}>
-                <div className="flex gap-2 px-4 py-3">
-                  <input value={newSubName} onChange={e => setNewSubName(e.target.value)} onKeyDown={e => e.key === 'Enter' && createSubProduct()}
-                    placeholder="Nombre del subproducto..."
-                    className="flex-1 h-9 px-3 rounded-lg border text-[13px] focus:outline-none focus:border-[#38C5B5]/50"
-                    style={{ borderColor: '#E2E6EB', color: '#1A2332' }} autoFocus />
-                  <button onClick={createSubProduct} disabled={!newSubName.trim()}
-                    className="h-9 px-4 rounded-lg text-[12px] font-bold text-white disabled:opacity-40"
-                    style={{ background: '#38C5B5' }}>Crear</button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Subproduct list */}
-          <div className="max-h-[300px] overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {/* "Todas" filter option */}
-            <div onClick={() => setSubFilter(null)} className="flex items-center gap-2.5 px-4 py-2.5 cursor-pointer transition-colors"
-              style={{ background: subFilter === null ? '#F0FDFA' : 'transparent' }}>
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: subFilter === null ? '#38C5B5' : '#F3F4F6' }}>
-                <Image className="w-3.5 h-3.5" style={{ color: subFilter === null ? 'white' : '#9CA3AF' }} />
-              </div>
-              <span className="text-[12px] font-semibold flex-1" style={{ color: subFilter === null ? '#115E59' : '#35414A' }}>Todas las fotos</span>
-              <span className="text-[11px] font-mono" style={{ color: '#ADB5B7' }}>{photos.length}</span>
-            </div>
-
-            {subProducts.map((sub, idx) => (
-              <div key={sub.id} className="flex items-center gap-1 px-2 py-1.5 group/sub">
-                {/* Reorder arrows */}
-                <div className="flex flex-col gap-px shrink-0 opacity-0 group-hover/sub:opacity-100 transition-opacity">
-                  <button onClick={(e) => { e.stopPropagation(); moveSubProduct(idx, -1) }} disabled={idx === 0}
-                    className="w-5 h-5 flex items-center justify-center rounded hover:bg-black/10 disabled:opacity-20">
-                    <ChevronUp className="w-3 h-3" style={{ color: '#5D7380' }} />
-                  </button>
-                  <button onClick={(e) => { e.stopPropagation(); moveSubProduct(idx, 1) }} disabled={idx === subProducts.length - 1}
-                    className="w-5 h-5 flex items-center justify-center rounded hover:bg-black/10 disabled:opacity-20">
-                    <ChevronDown className="w-3 h-3" style={{ color: '#5D7380' }} />
-                  </button>
-                </div>
-                {/* Name row */}
-                {renamingSubId === sub.id ? (
-                  <input value={renameSubValue} onChange={e => setRenameSubValue(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') renameSubProduct(sub.id); if (e.key === 'Escape') setRenamingSubId(null) }}
-                    onBlur={() => renameSubProduct(sub.id)}
-                    className="flex-1 min-w-0 h-7 px-2 rounded-md border text-[12px] font-semibold focus:outline-none"
-                    style={{ borderColor: '#38C5B5', color: '#1A2332' }} autoFocus />
-                ) : (
-                  <div onClick={() => setSubFilter(subFilter === sub.id ? null : sub.id)}
-                    className="flex items-center gap-2 flex-1 min-w-0 px-2 py-1 rounded-lg cursor-pointer transition-colors"
-                    style={{ background: subFilter === sub.id ? '#F0FDFA' : 'transparent' }}>
-                    <Folder className="w-4 h-4 shrink-0" style={{ color: subFilter === sub.id ? '#38C5B5' : '#9CA3AF' }} />
-                    <span className="text-[12px] font-semibold truncate" style={{ color: subFilter === sub.id ? '#115E59' : '#35414A' }}>{sub.name}</span>
-                    <span className="text-[10px] font-mono shrink-0" style={{ color: '#ADB5B7' }}>{sub._count.photos}</span>
-                  </div>
-                )}
-                {/* Actions */}
-                <button onClick={(e) => { e.stopPropagation(); setRenamingSubId(sub.id); setRenameSubValue(sub.name) }}
-                  className="w-6 h-6 rounded flex items-center justify-center opacity-0 group-hover/sub:opacity-100 hover:bg-black/10 transition-opacity shrink-0">
-                  <Pencil className="w-3 h-3" style={{ color: '#5D7380' }} />
-                </button>
-                <button onClick={(e) => { e.stopPropagation(); deleteSubProduct(sub.id) }}
-                  className="w-6 h-6 rounded flex items-center justify-center opacity-0 group-hover/sub:opacity-100 hover:bg-red-50 transition-opacity shrink-0">
-                  <Trash2 className="w-3 h-3" style={{ color: '#E12E2E' }} />
-                </button>
-              </div>
-            ))}
-
-            {subProducts.length === 0 && !showNewSub && (
-              <div className="px-4 py-4 text-center">
-                <Folder className="w-6 h-6 mx-auto mb-1.5" style={{ color: '#D1D5DB' }} />
-                <p className="text-[11px]" style={{ color: '#ADB5B7' }}>Crea subproductos para organizar las fotos</p>
-              </div>
+        {/* Gallery upload buttons — only inside a category */}
+        {selectedSubId && (
+          <div className="flex gap-2 mb-4">
+            <button onClick={() => { setPendingPhase('antes'); galleryRef.current?.click() }} disabled={uploading}
+              className="flex-1 h-9 rounded-lg text-[12px] font-semibold border flex items-center justify-center gap-1.5 disabled:opacity-50"
+              style={{ borderColor: '#F0A030', color: '#92400E', background: '#FFFBF5' }}>
+              <ImagePlus className="w-3.5 h-3.5" /> Galería ANTES
+            </button>
+            <button onClick={() => { setPendingPhase('despues'); galleryRef.current?.click() }} disabled={uploading}
+              className="flex-1 h-9 rounded-lg text-[12px] font-semibold border flex items-center justify-center gap-1.5 disabled:opacity-50"
+              style={{ borderColor: '#2DA194', color: '#115E59', background: '#F7FDFC' }}>
+              <ImagePlus className="w-3.5 h-3.5" /> Galería DESPUÉS
+            </button>
+            {selectMode && (
+              <button onClick={selectedIds.size > 0 ? downloadSelected : () => { setSelectMode(false); setSelectedIds(new Set()) }}
+                className="h-9 px-4 rounded-lg text-[12px] font-bold text-white flex items-center gap-1.5 shrink-0"
+                style={{ background: selectedIds.size > 0 ? '#38C5B5' : '#6B7280' }}>
+                <Download className="w-3.5 h-3.5" />
+                {selectedIds.size > 0 ? `Descargar ${selectedIds.size}` : 'Cancelar'}
+              </button>
             )}
           </div>
+        )}
 
-          {/* Active sub filter indicator */}
-          {subFilter && (
-            <div className="flex items-center justify-between px-4 py-2 border-t" style={{ borderColor: '#EDF0F4', background: '#F0FDFA' }}>
-              <span className="text-[11px] font-semibold" style={{ color: '#115E59' }}>
-                Filtrando: {subProducts.find(s => s.id === subFilter)?.name}
-              </span>
-              <button onClick={() => setSubFilter(null)} className="text-[11px] font-semibold" style={{ color: '#5D7380' }}>
-                <X className="w-3.5 h-3.5 inline" /> Quitar filtro
+        {/* ═══ CATEGORY FOLDERS VIEW (when no category selected) ═══ */}
+        {!selectedSubId && (
+          <div className="mb-6">
+            {/* Header with New Category button */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <FolderOpen className="w-5 h-5" style={{ color: '#38C5B5' }} />
+                <h2 className="text-[18px] font-bold" style={{ color: '#1A2332' }}>Categorías</h2>
+                <span className="text-[11px] px-2 py-0.5 rounded-lg font-bold" style={{ background: '#F0FDFA', color: '#38C5B5' }}>{subProducts.length}</span>
+              </div>
+              <button onClick={() => setShowNewSub(!showNewSub)} className="flex items-center gap-1.5 h-9 px-4 rounded-xl text-[12px] font-bold text-white"
+                style={{ background: '#38C5B5' }}>
+                <Plus className="w-4 h-4" /> Nueva categoría
               </button>
             </div>
-          )}
-        </div>
+
+            {/* New category input */}
+            <AnimatePresence>
+              {showNewSub && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mb-4">
+                  <div className="flex gap-2 p-4 rounded-xl border" style={{ borderColor: '#99F6E4', background: '#F0FDFA' }}>
+                    <input value={newSubName} onChange={e => setNewSubName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') createSubProduct(); if (e.key === 'Escape') setShowNewSub(false) }}
+                      placeholder="Nombre de la categoría..."
+                      className="flex-1 h-10 px-4 rounded-lg border text-[14px] focus:outline-none"
+                      style={{ borderColor: '#99F6E4', color: '#1A2332', background: 'white' }} autoFocus />
+                    <button onClick={createSubProduct} disabled={!newSubName.trim()}
+                      className="h-10 px-5 rounded-lg text-[13px] font-bold text-white disabled:opacity-40"
+                      style={{ background: '#2DA194' }}>Crear</button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Category folder grid */}
+            {subProducts.length > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {subProducts.map((sub, idx) => {
+                  const cover = subCoverMap.get(sub.id)
+                  return (
+                    <motion.div key={sub.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.03 }}
+                      className="relative group rounded-xl overflow-hidden border bg-white cursor-pointer active:scale-[0.98] transition-transform"
+                      style={{ borderColor: '#E8EBF0' }}>
+                      {/* Folder cover image */}
+                      <div className="aspect-[4/3] overflow-hidden relative" onClick={() => { setSelectedSubId(sub.id); setTagFilter('ALL'); setReorderMode(false); setSelectMode(false); setSelectedIds(new Set()) }}>
+                        {cover ? (
+                          <img src={cover.thumbnailUrl || cover.url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #F0FDFA, #CCFBF1)' }}>
+                            <Folder className="w-12 h-12" style={{ color: '#99F6E4' }} />
+                          </div>
+                        )}
+                        {/* Gradient overlay */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                        {/* Name + count at bottom */}
+                        <div className="absolute bottom-0 left-0 right-0 p-3">
+                          <p className="text-[13px] font-bold text-white truncate">{sub.name}</p>
+                          <p className="text-[10px] text-white/70">{sub._count.photos} foto{sub._count.photos !== 1 ? 's' : ''}</p>
+                        </div>
+                      </div>
+                      {/* Hover actions */}
+                      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={(e) => { e.stopPropagation(); moveSubProduct(idx, -1) }} disabled={idx === 0}
+                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-white/90 shadow-sm disabled:opacity-20">
+                          <ChevronUp className="w-3.5 h-3.5" style={{ color: '#35414A' }} />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); moveSubProduct(idx, 1) }} disabled={idx === subProducts.length - 1}
+                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-white/90 shadow-sm disabled:opacity-20">
+                          <ChevronDown className="w-3.5 h-3.5" style={{ color: '#35414A' }} />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); setRenamingSubId(sub.id); setRenameSubValue(sub.name) }}
+                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-white/90 shadow-sm">
+                          <Pencil className="w-3.5 h-3.5" style={{ color: '#5D7380' }} />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); deleteSubProduct(sub.id) }}
+                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-red-500/90 shadow-sm">
+                          <Trash2 className="w-3.5 h-3.5 text-white" />
+                        </button>
+                      </div>
+                      {/* Rename inline */}
+                      {renamingSubId === sub.id && (
+                        <div className="absolute inset-0 bg-white/95 flex items-center justify-center p-4 z-10" onClick={e => e.stopPropagation()}>
+                          <input value={renameSubValue} onChange={e => setRenameSubValue(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') renameSubProduct(sub.id); if (e.key === 'Escape') setRenamingSubId(null) }}
+                            className="w-full h-10 px-3 rounded-lg border text-[13px] font-semibold text-center focus:outline-none"
+                            style={{ borderColor: '#38C5B5', color: '#1A2332' }} autoFocus />
+                        </div>
+                      )}
+                    </motion.div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-16 rounded-2xl border-2 border-dashed" style={{ borderColor: '#E2E6EB' }}>
+                <FolderOpen className="w-14 h-14 mx-auto mb-3" style={{ color: '#D1D5DB' }} />
+                <p className="text-[16px] font-bold mb-1" style={{ color: '#35414A' }}>Sin categorías</p>
+                <p className="text-[13px]" style={{ color: '#ADB5B7' }}>Crea una categoría para organizar las fotos del proyecto</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ═<arg_value> BREADCRUMB when inside a category ═══ */}
+        {selectedSubId && selectedSub && (
+          <div className="flex items-center gap-2 mb-4">
+            <button onClick={() => { setSelectedSubId(null); setReorderMode(false); setSelectMode(false); setSelectedIds(new Set()) }}
+              className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold border transition-colors"
+              style={{ borderColor: '#E2E6EB', color: '#5D7380', background: '#FAFAFA' }}>
+              <ChevronLeft className="w-3.5 h-3.5" /> Categorías
+            </button>
+            <ChevronRightIcon className="w-3.5 h-3.5" style={{ color: '#ADB5B7' }} />
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <Folder className="w-4 h-4 shrink-0" style={{ color: '#38C5B5' }} />
+              <span className="text-[14px] font-bold truncate" style={{ color: '#1A2332' }}>{selectedSub.name}</span>
+              <span className="text-[11px] font-mono shrink-0" style={{ color: '#ADB5B7' }}>({filteredPhotos.length})</span>
+            </div>
+            {isManagerOrAdmin() && (
+              <button onClick={() => { setRenamingSubId(selectedSubId); setRenameSubValue(selectedSub.name) }}
+                className="h-7 px-2.5 rounded-lg text-[11px] font-semibold border"
+                style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>
+                <Pencil className="w-3 h-3 inline" /> Renombrar
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Rename overlay for breadcrumb rename */}
+        {renamingSubId && selectedSubId && renamingSubId === selectedSubId && (
+          <div className="mb-4 flex gap-2">
+            <input value={renameSubValue} onChange={e => setRenameSubValue(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { renameSubProduct(renamingSubId); } if (e.key === 'Escape') setRenamingSubId(null) }}
+              className="flex-1 h-10 px-4 rounded-lg border text-[14px] font-semibold focus:outline-none"
+              style={{ borderColor: '#38C5B5', color: '#1A2332' }} autoFocus />
+            <button onClick={() => { renameSubProduct(renamingSubId); }}
+              className="h-10 px-5 rounded-lg text-[13px] font-bold text-white" style={{ background: '#38C5B5' }}>Guardar</button>
+            <button onClick={() => setRenamingSubId(null)}
+              className="h-10 px-4 rounded-lg text-[13px] font-semibold border" style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>X</button>
+          </div>
+        )}
 
         {/* Uploading indicator */}
         {uploading && (
@@ -644,11 +681,12 @@ export default function ProjectDetailPage() {
           </div>
         )}
 
-        {/* Tabs */}
+        {/* Tabs — only show when inside a category */}
+        {selectedSubId && (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6 h-auto gap-1 p-1 rounded-xl bg-white border" style={{ borderColor: '#E2E6EB' }}>
             {[
-              { id: 'gallery', label: 'Fotos', icon: Image, count: photos.length },
+              { id: 'gallery', label: 'Fotos', icon: Image, count: filteredPhotos.length },
               { id: 'tasks', label: 'Tareas', icon: CheckSquare, count: tasks.length },
               { id: 'timeline', label: 'Actividad', icon: Clock },
             ].map(tab => (
@@ -806,6 +844,8 @@ export default function ProjectDetailPage() {
             </div>
           </TabsContent>
         </Tabs>
+        )}
+
       </div>
 
       <div className="h-20 lg:h-0" />
