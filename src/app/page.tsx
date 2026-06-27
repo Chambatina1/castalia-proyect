@@ -1,16 +1,18 @@
 'use client'
 
 import { useAppStore } from '@/store/app-store'
+import { AppLayout } from '@/components/castalia/app-layout'
 import LoginPage from '@/components/castalia/login-page'
 import DashboardPage from '@/components/castalia/dashboard-page'
 import ProjectDetailPage from '@/components/castalia/project-detail-page'
 import TasksPage from '@/components/castalia/tasks-page'
 import ChatPage from '@/components/castalia/chat-page'
+import ReportsPage from '@/components/castalia/reports-page'
+import ClientsPage from '@/components/castalia/clients-page'
+import SettingsPage from '@/components/castalia/settings-page'
 
 export default function Home() {
   const currentView = useAppStore((s) => s.currentView)
-
-  if (currentView === 'login') return <LoginPage />
 
   const views: Record<string, React.ReactNode> = {
     dashboard: <DashboardPage />,
@@ -18,11 +20,15 @@ export default function Home() {
     'project-detail': <ProjectDetailPage />,
     tasks: <TasksPage />,
     chat: <ChatPage />,
-    reports: <DashboardPage />, // Placeholder - will show dashboard
-    clients: <DashboardPage />,
-    settings: <DashboardPage />,
+    reports: <ReportsPage />,
+    clients: <ClientsPage />,
+    settings: <SettingsPage />,
     'client-portal': <DashboardPage />,
   }
 
-  return views[currentView] || <DashboardPage />
+  return (
+    <AppLayout>
+      {currentView === 'login' ? <LoginPage /> : (views[currentView] || <DashboardPage />)}
+    </AppLayout>
+  )
 }

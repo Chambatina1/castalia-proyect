@@ -51,6 +51,10 @@
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-navy: var(--navy);
+  --color-navy-foreground: var(--navy-foreground);
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
 }
 
 /* ═══════════════════════════════════════════════════
@@ -100,6 +104,10 @@
   --chart-4: #ADB5B7;
   --chart-5: #35414A;
   /* Sidebar - dark luxury */
+  --navy: #0D1117;
+  --navy-foreground: #C8D1DC;
+  --gold: #38C5B5;
+  --gold-foreground: #FFFFFF;
   --sidebar: #0D1117;
   --sidebar-foreground: #C8D1DC;
   --sidebar-primary: #38C5B5;
@@ -140,6 +148,10 @@
   --chart-3: #5D7380;
   --chart-4: #8B949E;
   --chart-5: #ADB5B7;
+  --navy: #090C10;
+  --navy-foreground: #C8D1DC;
+  --gold: #38C5B5;
+  --gold-foreground: #FFFFFF;
   --sidebar: #090C10;
   --sidebar-foreground: #C8D1DC;
   --sidebar-primary: #38C5B5;

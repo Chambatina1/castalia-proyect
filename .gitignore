@@ -50,5 +50,12 @@ test
 prompt
 
 server.log
-# Skills directory
+
+# Skills & temp
 /skills/
+/tool-results/
+/agent-ctx/
+/scripts/*.json
+/download/
+db/*.db
+db/*.db-journal
