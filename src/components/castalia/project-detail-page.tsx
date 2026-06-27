@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, MapPin, Calendar, Users, Image, CheckSquare, MessageSquare, FileText, Clock, Camera, Upload } from 'lucide-react'
+import { ArrowLeft, MapPin, Calendar, Users, Image, CheckSquare, MessageSquare, FileText, Clock, Camera, Upload, ImageIcon, Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,7 +29,7 @@ interface ApiActivity {
 }
 
 export default function ProjectDetailPage() {
-  const { selectedProjectId, goBack, currentUser, isManagerOrAdmin } = useAppStore()
+  const { selectedProjectId, goBack, currentUser, isManagerOrAdmin, openUploadModal } = useAppStore()
   const { toast } = useToast()
 
   const [project, setProject] = useState<any>(null)
@@ -67,12 +67,24 @@ export default function ProjectDetailPage() {
     )
   }
 
-  const allTags = [...new Set(photos.flatMap(p => (p.tags || '').split(',').filter(Boolean)))]
+  const getTags = (p: ApiPhoto) => {
+    try { return JSON.parse(p.tags || '[]') } catch { return (p.tags || '').split(',').filter(Boolean) }
+  }
+  const getPhase = (p: ApiPhoto) => { const t = getTags(p); return t.includes('antes') ? 'antes' : t.includes('despues') ? 'despues' : null }
+  const getLocal = (p: ApiPhoto) => { const t = getTags(p); const loc = t.find(t => t.startsWith('local:')); return loc ? loc.replace('local:', '') : null }
+  const LOCAL_LABELS: Record<string, string> = { sala:'Sala', comedor:'Comedor', cocina:'Cocina', dormitorio:'Dormitorio', bano:'Baño', lobby:'Lobby', oficina:'Oficina', terraza:'Terraza', jardin:'Jardín', escaleras:'Escaleras', closet:'Closet', fachada:'Fachada', estacionamiento:'Estacionamiento', area_servicio:'Área Servicio', sala_tv:'Sala TV', bar:'Bar', gimnasio:'Gimnasio', otro:'Otro' }
 
-  const beforePhotos = photos.filter(p => (p.tags || '').includes('antes'))
-  const afterPhotos = photos.filter(p => (p.tags || '').includes('después'))
+  const allLocales = [...new Set(photos.map(p => getLocal(p)).filter(Boolean))]
+  const beforePhotos = photos.filter(p => getPhase(p) === 'antes')
+  const afterPhotos = photos.filter(p => getPhase(p) === 'despues')
 
-  const filteredPhotos = tagFilter === 'ALL' ? photos : photos.filter(p => (p.tags || '').includes(tagFilter))
+  const filteredPhotos = tagFilter === 'ALL'
+    ? photos
+    : tagFilter === 'antes'
+    ? beforePhotos
+    : tagFilter === 'despues'
+    ? afterPhotos
+    : photos.filter(p => getLocal(p) === tagFilter)
 
   const completedTasks = tasks.filter(t => t.status === 'COMPLETED').length
   const taskProgress = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0
@@ -96,9 +108,9 @@ export default function ProjectDetailPage() {
             </p>
           </div>
           {isManagerOrAdmin() && (
-            <Button className="h-10 px-5 rounded-xl text-[13px] font-semibold text-white border-0 gap-2"
+            <Button onClick={() => openUploadModal(selectedProjectId || '')} className="h-10 px-5 rounded-xl text-[13px] font-semibold text-white border-0 gap-2"
               style={{ background: 'linear-gradient(135deg, #38C5B5, #2DA194)' }}>
-              <Upload className="w-4 h-4" strokeWidth={2.5} />
+              <Camera className="w-4 h-4" strokeWidth={2.5} />
               <span className="hidden sm:inline">Subir Fotos</span>
             </Button>
           )}
@@ -182,52 +194,69 @@ export default function ProjectDetailPage() {
 
           {/* Gallery Tab */}
           <TabsContent value="gallery">
-            {/* Tag filters */}
+            {/* Fase filters: ANTES / DESPUÉS / LOCALES */}
             <div className="flex gap-2 mb-4 overflow-x-auto pb-1 hide-scrollbar">
-              <button onClick={() => setTagFilter('ALL')}
-                className="px-3.5 py-2 rounded-lg text-[12px] font-semibold whitespace-nowrap border transition-all"
-                style={{
-                  background: tagFilter === 'ALL' ? '#38C5B5' : 'white',
-                  color: tagFilter === 'ALL' ? 'white' : '#5D7380',
-                  borderColor: tagFilter === 'ALL' ? '#38C5B5' : '#E2E6EB',
-                }}>
-                Todas
-              </button>
-              {allTags.map(tag => (
-                <button key={tag} onClick={() => setTagFilter(tag)}
-                  className="px-3.5 py-2 rounded-lg text-[12px] font-semibold whitespace-nowrap border capitalize transition-all"
+              {[{id:'ALL',label:'Todas',color:'#38C5B5'},{id:'antes',label:'ANTES',color:'#F0A030'},{id:'despues',label:'DESPUÉS',color:'#2DA194'}].map(f => (
+                <button key={f.id} onClick={() => setTagFilter(f.id)}
+                  className="px-3.5 py-2 rounded-lg text-[12px] font-bold tracking-wide whitespace-nowrap border transition-all"
                   style={{
-                    background: tagFilter === tag ? '#38C5B5' : 'white',
-                    color: tagFilter === tag ? 'white' : '#5D7380',
-                    borderColor: tagFilter === tag ? '#38C5B5' : '#E2E6EB',
+                    background: tagFilter === f.id ? f.color : 'white',
+                    color: tagFilter === f.id ? 'white' : '#5D7380',
+                    borderColor: tagFilter === f.id ? f.color : '#E2E6EB',
                   }}>
-                  {tag}
+                  {f.label}
+                </button>
+              ))}
+              {allLocales.map(loc => (
+                <button key={loc} onClick={() => setTagFilter(loc)}
+                  className="px-3.5 py-2 rounded-lg text-[12px] font-semibold whitespace-nowrap border transition-all"
+                  style={{
+                    background: tagFilter === loc ? '#35414A' : 'white',
+                    color: tagFilter === loc ? 'white' : '#5D7380',
+                    borderColor: tagFilter === loc ? '#35414A' : '#E2E6EB',
+                  }}>
+                  {LOCAL_LABELS[loc] || loc}
                 </button>
               ))}
             </div>
             {/* Photo grid */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {filteredPhotos.map((photo, i) => (
+              {filteredPhotos.map((photo, i) => {
+                const phase = getPhase(photo)
+                const local = getLocal(photo)
+                return (
                 <motion.div key={photo.id}
                   initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.03 }}
                   className="relative group rounded-xl overflow-hidden border cursor-pointer aspect-[4/3]"
                   style={{ borderColor: '#E8EBF0' }}>
                   <img src={photo.thumbnailUrl || photo.url} alt={photo.caption || ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  {/* Phase badge - siempre visible */}
+                  <div className="absolute top-2 left-2 flex flex-col gap-1">
+                    {phase && (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold text-white"
+                        style={{ background: phase === 'antes' ? '#F0A030' : '#2DA194' }}>
+                        {phase === 'antes' ? 'ANTES' : 'DESPUÉS'}
+                      </span>
+                    )}
+                    {local && (
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold text-white"
+                        style={{ background: 'rgba(26,35,50,0.7)', backdropFilter: 'blur(4px)' }}>
+                        {LOCAL_LABELS[local] || local}
+                      </span>
+                    )}
+                  </div>
                   {photo.isUrgent && (
                     <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold text-white bg-red-500">URGENTE</div>
-                  )}
-                  {photo.isVisibleToClient && (
-                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold text-white"
-                      style={{ background: '#38C5B5' }}>CLIENTE</div>
                   )}
                   <div className="absolute bottom-0 left-0 right-0 p-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     <p className="text-[11px] text-white font-medium truncate">{photo.caption}</p>
                     <p className="text-[10px] text-white/60">{photo.uploadedBy?.name}</p>
                   </div>
                 </motion.div>
-              ))}
+                )
+              })}
             </div>
             {filteredPhotos.length === 0 && (
               <div className="text-center py-16">
@@ -268,28 +297,41 @@ export default function ProjectDetailPage() {
                 {beforePhotos.length > 0 && afterPhotos.length > 0 && (
                   <div className="mb-8">
                     <h4 className="text-[16px] font-bold mb-4" style={{ color: '#1A2332' }}>Antes / Después</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-[12px] font-bold uppercase tracking-wider mb-2" style={{ color: '#F0A030' }}>ANTES</p>
-                        <div className="space-y-3">
-                          {beforePhotos.slice(0, 4).map(p => (
-                            <div key={p.id} className="rounded-xl overflow-hidden border aspect-video" style={{ borderColor: '#E2E6EB' }}>
-                              <img src={p.url} alt={p.caption || ''} className="w-full h-full object-cover" loading="lazy" />
+                    {/* Group by local */}
+                    {[...new Set([...beforePhotos, ...afterPhotos].map(p => getLocal(p)).filter(Boolean))].map(loc => {
+                      const locBefore = beforePhotos.filter(p => getLocal(p) === loc)
+                      const locAfter = afterPhotos.filter(p => getLocal(p) === loc)
+                      if (locBefore.length === 0 && locAfter.length === 0) return null
+                      return (
+                        <div key={loc} className="mb-6">
+                          <p className="text-[14px] font-bold mb-3" style={{ color: '#35414A' }}>{LOCAL_LABELS[loc] || loc}</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-[11px] font-bold uppercase tracking-wider mb-2" style={{ color: '#F0A030' }}>ANTES</p>
+                              <div className="space-y-3">
+                                {locBefore.slice(0, 4).map(p => (
+                                  <div key={p.id} className="rounded-xl overflow-hidden border aspect-video" style={{ borderColor: '#E2E6EB' }}>
+                                    <img src={p.url} alt={p.caption || ''} className="w-full h-full object-cover" loading="lazy" />
+                                  </div>
+                                ))}
+                                {locBefore.length === 0 && <p className="text-[13px] py-4" style={{ color: '#ADB5B7' }}>Sin foto "antes"</p>}
+                              </div>
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-[12px] font-bold uppercase tracking-wider mb-2" style={{ color: '#38C5B5' }}>DESPUÉS</p>
-                        <div className="space-y-3">
-                          {afterPhotos.slice(0, 4).map(p => (
-                            <div key={p.id} className="rounded-xl overflow-hidden border aspect-video" style={{ borderColor: '#E2E6EB' }}>
-                              <img src={p.url} alt={p.caption || ''} className="w-full h-full object-cover" loading="lazy" />
+                            <div>
+                              <p className="text-[11px] font-bold uppercase tracking-wider mb-2" style={{ color: '#2DA194' }}>DESPUÉS</p>
+                              <div className="space-y-3">
+                                {locAfter.slice(0, 4).map(p => (
+                                  <div key={p.id} className="rounded-xl overflow-hidden border aspect-video" style={{ borderColor: '#E2E6EB' }}>
+                                    <img src={p.url} alt={p.caption || ''} className="w-full h-full object-cover" loading="lazy" />
+                                  </div>
+                                ))}
+                                {locAfter.length === 0 && <p className="text-[13px] py-4" style={{ color: '#ADB5B7' }}>Sin foto "después"</p>}
+                              </div>
                             </div>
-                          ))}
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      )
+                    })}
                   </div>
                 )}
                 {/* Approved photos gallery */}
