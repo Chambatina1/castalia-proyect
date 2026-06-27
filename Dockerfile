@@ -60,4 +60,4 @@ USER nextjs
 EXPOSE 10000
 
 # If no DB exists yet, copy from the initialized template
-CMD ["sh", "-c", "if [ ! -f /data/custom.db ]; then cp /app/template.db /data/custom.db && chmod 644 /data/custom.db; fi; node server.js"]
+CMD ["sh", "-c", "mkdir -p /data/uploads; if [ ! -f /data/custom.db ]; then cp /app/template.db /data/custom.db && chmod 644 /data/custom.db; fi; node server.js"]
