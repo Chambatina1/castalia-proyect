@@ -2,11 +2,6 @@
 
 import { useState, useRef } from 'react';
 import { X, Plus, Camera } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAppStore } from '@/store/app-store';
@@ -26,7 +21,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
 
   const reset = () => { setName(''); setCoverPreview(null); setCoverFile(null); setIsSubmitting(false); };
 
-  const handleClose = () => { onClose(); setTimeout(reset, 250); };
+  const handleClose = () => { onClose(); setTimeout(reset, 300); };
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -36,84 +31,93 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
     e.target.value = '';
   };
 
-  const handleSubmit = async () => {
-    if (!name.trim()) {
-      toast({ title: 'Nombre requerido', description: 'Escribe un nombre para el proyecto', variant: 'destructive' });
+  const handleCreate = async () => {
+    const projectName = name.trim();
+    if (!projectName) {
+      toast({ title: 'Nombre requerido' });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      // 1. Create project first (no cover yet)
+      // 1. Create project
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), creatorId: currentUser?.id }),
+        body: JSON.stringify({ name: projectName, creatorId: currentUser?.id }),
       });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'No se pudo crear el proyecto');
-      }
-      const project = await res.json();
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error del servidor');
 
-      // 2. Upload cover photo now that we have the projectId
-      if (coverFile && project?.id) {
+      // 2. Upload cover if selected
+      if (coverFile && data.id) {
         try {
           const fd = new FormData();
           fd.append('files', coverFile);
-          fd.append('projectId', project.id);
+          fd.append('projectId', data.id);
           fd.append('uploadedBy', currentUser?.id || '');
           fd.append('caption', 'Portada');
           fd.append('tags', '[]');
-
           const photoRes = await fetch('/api/photos', { method: 'POST', body: fd });
           if (photoRes.ok) {
             const photoData = await photoRes.json();
-            const coverUrl = photoData.photos?.[0]?.url;
-            if (coverUrl) {
-              // Update project with cover image
-              await fetch(`/api/projects/${project.id}`, {
+            const url = photoData.photos?.[0]?.url;
+            if (url) {
+              await fetch(`/api/projects/${data.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ coverImage: coverUrl }),
+                body: JSON.stringify({ coverImage: url }),
               });
             }
           }
-        } catch {
-          // Cover upload failed but project was created — not critical
-        }
+        } catch { /* cover is optional */ }
       }
 
-      toast({ title: 'Proyecto creado', description: name });
+      toast({ title: 'Proyecto creado', description: projectName });
       handleClose();
       onCreated?.();
     } catch (err) {
-      toast({ title: 'Error', description: err instanceof Error ? err.message : 'No se pudo crear', variant: 'destructive' });
-    } finally { setIsSubmitting(false); }
+      const msg = err instanceof Error ? err.message : 'No se pudo crear';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+      console.error('Create project error:', err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
+  if (!open) return null;
+
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="sm:max-w-sm p-0 gap-0 overflow-hidden rounded-2xl">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
+
+      {/* Panel */}
+      <div
+        className="relative w-full sm:max-w-sm bg-white sm:rounded-2xl rounded-t-2xl overflow-hidden animate-in slide-in-from-bottom sm:slide-in-from-bottom-4 duration-200"
+        style={{ maxHeight: '90vh', overflowY: 'auto' }}
+      >
         <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFile} />
 
-        <div className="flex items-center justify-between px-6 pt-5 pb-3">
-          <DialogTitle className="text-lg font-bold flex items-center gap-2">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+          <div className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #38C5B5, #2DA194)' }}>
               <Plus className="h-4 w-4 text-white" strokeWidth={2.5} />
             </div>
-            Nuevo Proyecto
-          </DialogTitle>
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={handleClose}>
-            <X className="h-4 w-4" />
-          </Button>
+            <span className="text-lg font-bold" style={{ color: '#1A2332' }}>Nuevo Proyecto</span>
+          </div>
+          <button onClick={handleClose} className="h-8 w-8 rounded-full flex items-center justify-center hover:bg-gray-100">
+            <X className="h-4 w-4" style={{ color: '#5D7380' }} />
+          </button>
         </div>
 
-        <div className="px-6 pb-6 space-y-5">
-          {/* Cover photo */}
+        {/* Body */}
+        <div className="px-5 pb-6 space-y-4">
+          {/* Cover */}
           <div
             onClick={() => fileRef.current?.click()}
-            className="w-full aspect-video rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer transition-all hover:border-primary/70"
+            className="w-full aspect-video rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer"
             style={{ borderColor: coverPreview ? 'transparent' : '#E2E6EB', background: coverPreview ? '#000' : '#F7F8FA' }}
           >
             {coverPreview ? (
@@ -128,38 +132,33 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
           </div>
 
           {/* Name */}
-          <div className="space-y-2">
-            <label className="text-sm font-semibold">Nombre del proyecto *</label>
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold" style={{ color: '#1A2332' }}>Nombre del proyecto *</label>
             <Input
               placeholder="Ej: Residencia Playa del Carmen"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="h-11 text-sm rounded-xl"
               autoFocus
-              required
             />
           </div>
 
-          {/* Actions */}
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="ghost" onClick={handleClose} className="text-sm rounded-lg">Cancelar</Button>
-            <Button
-              type="button"
-              onClick={handleSubmit}
-              disabled={isSubmitting || !name.trim()}
-              className="gap-2 h-10 px-6 text-sm font-semibold rounded-lg text-white"
-              style={{ background: 'linear-gradient(135deg, #38C5B5, #2DA194)' }}
-            >
-              {isSubmitting ? (
-                <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <Plus className="h-4 w-4" strokeWidth={2.5} />
-              )}
-              {isSubmitting ? 'Creando...' : 'Crear'}
-            </Button>
-          </div>
+          {/* Create button */}
+          <button
+            onClick={handleCreate}
+            disabled={isSubmitting || !name.trim()}
+            className="w-full h-11 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 disabled:opacity-50"
+            style={{ background: 'linear-gradient(135deg, #38C5B5, #2DA194)' }}
+          >
+            {isSubmitting ? (
+              <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" strokeWidth={2.5} />
+            )}
+            {isSubmitting ? 'Creando...' : 'Crear Proyecto'}
+          </button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
