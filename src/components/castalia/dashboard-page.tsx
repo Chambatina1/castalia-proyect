@@ -325,18 +325,19 @@ export default function DashboardPage() {
                       <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                         <div className="pt-3 mt-3 border-t" style={{ borderColor: '#EDF0F4' }}>
                           {stat.key === 'active' && (
-                            <div className="space-y-2">
-                              {projects.filter(p => p.status === 'ACTIVE').slice(0, 5).map(p => (
-                                <div key={p.id} onClick={(e) => { e.stopPropagation(); navigateTo('project-detail', p.id); selectProject(p as any); }} className="flex items-center gap-2 p-2 rounded-lg hover:bg-black/5 cursor-pointer">
-                                  <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0"><img src={p.coverImage || ''} alt="" className="w-full h-full object-cover" /></div>
-                                  <p className="text-[12px] font-medium truncate" style={{ color: '#35414A' }}>{p.name}</p>
+                            <div className="max-h-[280px] overflow-y-auto space-y-2 -mx-1 px-1">
+                              {projects.filter(p => p.status === 'ACTIVE').map(p => (
+                                <div key={p.id} onClick={(e) => { e.stopPropagation(); navigateTo('project-detail', p.id); selectProject(p as any); }} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-black/5 cursor-pointer">
+                                  <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 bg-gray-100"><img src={p.coverImage || ''} alt="" className="w-full h-full object-cover" /></div>
+                                  <p className="text-[12px] font-medium truncate flex-1" style={{ color: '#35414A' }}>{p.name}</p>
+                                  <span className="text-[10px] font-bold shrink-0" style={{ color: '#38C5B5' }}>{p._count.photos}f</span>
                                 </div>
                               ))}
                             </div>
                           )}
                           {stat.key === 'photos' && (
-                            <div className="space-y-2">
-                              {projects.filter(p => p._count.photos > 0).sort((a,b) => b._count.photos - a._count.photos).slice(0, 5).map(p => (
+                            <div className="max-h-[280px] overflow-y-auto space-y-2 -mx-1 px-1">
+                              {projects.filter(p => p._count.photos > 0).sort((a,b) => b._count.photos - a._count.photos).map(p => (
                                 <div key={p.id} onClick={(e) => { e.stopPropagation(); navigateTo('project-detail', p.id); selectProject(p as any); }} className="flex items-center justify-between p-2 rounded-lg hover:bg-black/5 cursor-pointer">
                                   <p className="text-[12px] font-medium truncate" style={{ color: '#35414A' }}>{p.name}</p>
                                   <span className="text-[11px] font-bold" style={{ color: stat.color }}>{p._count.photos}</span>
