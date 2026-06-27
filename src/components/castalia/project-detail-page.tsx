@@ -709,6 +709,11 @@ export default function ProjectDetailPage() {
                       {/* Action buttons */}
                       {!reorderMode && (
                         <div className="absolute top-2 right-2 flex gap-1">
+                          <button onClick={(e) => { e.stopPropagation(); setAssigningSubPhotoId(photo.id) }}
+                            className="h-7 w-7 rounded-lg flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm"
+                            title="Asignar a subproducto">
+                            <Folder className="w-3.5 h-3.5 text-white" />
+                          </button>
                           <button onClick={(e) => { e.stopPropagation(); downloadPhoto(photo) }}
                             className="h-7 w-7 rounded-lg flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
                             <Download className="w-3.5 h-3.5 text-white" />
@@ -857,6 +862,43 @@ export default function ProjectDetailPage() {
                 style={{ background: '#38C5B5' }}>
                 <Save className="w-4 h-4" /> Guardar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Assign Photo to SubProduct Modal ═══ */}
+      {assigningSubPhotoId && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setAssigningSubPhotoId(null)} />
+          <div className="relative w-full sm:w-[340px] bg-white rounded-t-2xl sm:rounded-2xl overflow-hidden shadow-xl max-h-[70vh] flex flex-col">
+            <div className="p-5 pb-3 shrink-0">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#F0FDFA' }}>
+                  <Folder className="w-5 h-5" style={{ color: '#38C5B5' }} />
+                </div>
+                <h3 className="text-[17px] font-bold" style={{ color: '#1A2332' }}>Asignar a subproducto</h3>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 pb-2">
+              <button onClick={() => assignPhotoToSub(assigningSubPhotoId, null)}
+                className="w-full flex items-center gap-3 p-3 rounded-xl mb-1 border transition-colors text-left"
+                style={{ borderColor: '#E2E6EB', background: '#FAFAFA' }}>
+                <Image className="w-4 h-4 shrink-0" style={{ color: '#9CA3AF' }} />
+                <span className="text-[13px] font-medium" style={{ color: '#5D7380' }}>Sin subproducto</span>
+              </button>
+              {subProducts.map(sub => (
+                <button key={sub.id} onClick={() => assignPhotoToSub(assigningSubPhotoId, sub.id)}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl mb-1 border transition-colors text-left"
+                  style={{ borderColor: photos.find(p => p.id === assigningSubPhotoId)?.subProductId === sub.id ? '#38C5B5' : '#E2E6EB', background: photos.find(p => p.id === assigningSubPhotoId)?.subProductId === sub.id ? '#F0FDFA' : 'white' }}>
+                  <Folder className="w-4 h-4 shrink-0" style={{ color: '#38C5B5' }} />
+                  <span className="text-[13px] font-semibold flex-1 truncate" style={{ color: '#1A2332' }}>{sub.name}</span>
+                  <span className="text-[10px] font-mono" style={{ color: '#ADB5B7' }}>{sub._count.photos}</span>
+                </button>
+              ))}
+            </div>
+            <div className="p-4 pt-2 border-t shrink-0" style={{ borderColor: '#E8EBF0' }}>
+              <button onClick={() => setAssigningSubPhotoId(null)} className="w-full h-11 text-[14px] font-semibold rounded-xl" style={{ color: '#5D7380' }}>Cerrar</button>
             </div>
           </div>
         </div>
