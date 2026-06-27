@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Building2, Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react'
+import { Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -88,9 +88,8 @@ export default function LoginPage() {
       >
         {/* Logo */}
         <div className="flex items-center gap-4 mb-14">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center"
-            style={{ background: 'linear-gradient(135deg, #38C5B5 0%, #2DA194 100%)' }}>
-            <Building2 className="w-8 h-8 text-white" strokeWidth={1.5} />
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center overflow-hidden">
+            <img src="/logo-sidebar.png" alt="Castalia" className="w-14 h-14 object-contain" />
           </div>
           <div>
             <h1 className="text-[22px] font-bold text-white tracking-[-0.02em]">CASTALIA</h1>
@@ -171,9 +170,8 @@ export default function LoginPage() {
         >
           {/* Mobile logo */}
           <div className="flex items-center gap-3 mb-10 lg:hidden">
-            <div className="w-11 h-11 rounded-xl flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #38C5B5 0%, #2DA194 100%)' }}>
-              <Building2 className="w-6 h-6 text-white" strokeWidth={1.5} />
+            <div className="w-11 h-11 rounded-xl flex items-center justify-center overflow-hidden">
+              <img src="/logo-sidebar.png" alt="Castalia" className="w-11 h-11 object-contain" />
             </div>
             <div>
               <h1 className="text-[18px] font-bold text-white tracking-[-0.02em]">CASTALIA PROYECT</h1>

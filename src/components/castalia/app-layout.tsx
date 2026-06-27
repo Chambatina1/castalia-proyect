@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Building2,
   LayoutDashboard,
   FolderKanban,
   CheckSquare,
@@ -9,7 +8,6 @@ import {
   FileBarChart,
   Users,
   Settings,
-  Plus,
   Camera,
   FileText,
   Bell,
@@ -19,7 +17,6 @@ import {
   PanelLeftOpen,
   LogOut,
   User as UserIcon,
-  ChevronLeft,
   X,
 } from 'lucide-react';
 
@@ -169,8 +166,8 @@ function SidebarContent({ collapsed, onClose }: { collapsed: boolean; onClose?: 
     <div className="flex h-full flex-col bg-navy text-navy-foreground">
       {/* Logo */}
       <div className={cn('flex h-16 items-center gap-3 px-4 border-b border-sidebar-border', collapsed && 'justify-center px-2')}>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gold/15">
-          <Building2 className="h-5 w-5 text-gold" />
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg overflow-hidden">
+          <img src="/logo-sidebar.png" alt="Castalia" className="h-9 w-9 object-contain" />
         </div>
         {!collapsed && (
           <div className="flex flex-col overflow-hidden">
