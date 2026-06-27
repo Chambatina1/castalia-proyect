@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, MapPin, Calendar, Image, CheckSquare, MessageSquare, FileText, Clock, Camera, X, ChevronLeft, ChevronRight, Pencil, Trash2, Eraser } from 'lucide-react'
+import { ArrowLeft, MapPin, Calendar, Image, CheckSquare, MessageSquare, FileText, Clock, Camera, X, ChevronLeft, ChevronRight, Pencil, Trash2, Eraser, Download, Share2, Copy, CheckCircle, ImagePlus, Link2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -48,9 +48,21 @@ export default function ProjectDetailPage() {
   const lastDrawPos = useRef<{ x: number; y: number } | null>(null)
   const drawImgLoaded = useRef(false)
 
-  const getTags = (p: ApiPhoto) => {
-    try { return JSON.parse(p.tags || '[]') } catch { return (p.tags || '').split(',').filter(Boolean) }
-  }
+  // Photo upload
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const galleryRef = useRef<HTMLInputElement>(null)
+  const [pendingPhase, setPendingPhase] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+
+  // Selection mode
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  // Share link
+  const [shareLink, setShareLink] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const getTags = (p: ApiPhoto) => { try { return JSON.parse(p.tags || '[]') } catch { return (p.tags || '').split(',').filter(Boolean) } }
   const getPhase = (p: ApiPhoto) => { const t = getTags(p); return t.includes('antes') ? 'antes' : t.includes('despues') ? 'despues' : null }
   const getLocal = (p: ApiPhoto) => { const t = getTags(p); const loc = t.find(t => t.startsWith('local:')); return loc ? loc.replace('local:', '') : null }
 
@@ -65,6 +77,12 @@ export default function ProjectDetailPage() {
     : tagFilter === 'despues'
     ? afterPhotos
     : photos.filter(p => getLocal(p) === tagFilter)
+
+  const loadPhotos = useCallback(async () => {
+    if (!selectedProjectId) return
+    const phRes = await fetch(`/api/photos?projectId=${selectedProjectId}`).then(r => r.json())
+    if (Array.isArray(phRes?.photos)) setPhotos(phRes.photos.map((p: any) => ({ ...p, uploadedBy: p.uploader })))
+  }, [selectedProjectId])
 
   useEffect(() => {
     if (!selectedProjectId) return
@@ -90,7 +108,7 @@ export default function ProjectDetailPage() {
   photoCountRef.current = filteredPhotos.length
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setLightboxIdx(null); setDrawMode(false); }
+      if (e.key === 'Escape') { setLightboxIdx(null); setDrawMode(false); setSelectMode(false); setSelectedIds(new Set()) }
       if (lightboxIdx !== null) {
         const count = photoCountRef.current
         if (count > 0) {
@@ -106,7 +124,92 @@ export default function ProjectDetailPage() {
   const completedTasks = tasks.filter(t => t.status === 'COMPLETED').length
   const taskProgress = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0
 
-  // Draw handlers for lightbox
+  // ─── Photo Upload by Phase ───
+  const handlePhaseUpload = async (files: FileList, fase: string) => {
+    if (!files.length || !selectedProjectId || !pendingPhase) return
+    setUploading(true)
+    try {
+      const fd = new FormData()
+      for (let i = 0; i < files.length; i++) fd.append('files', files[i])
+      fd.append('projectId', selectedProjectId)
+      fd.append('uploadedBy', currentUser?.id || '')
+      fd.append('fase', fase)
+      fd.append('tags', JSON.stringify([fase]))
+
+      const res = await fetch('/api/photos', { method: 'POST', body: fd })
+      if (!res.ok) throw new Error()
+      toast({ title: `${files.length} foto(s) subida(s)`, description: fase === 'antes' ? 'ANTES' : 'DESPUÉS' })
+      await loadPhotos()
+    } catch {
+      toast({ title: 'Error al subir fotos', variant: 'destructive' })
+    } finally {
+      setUploading(false)
+      setPendingPhase(null)
+    }
+  }
+
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && pendingPhase) handlePhaseUpload(e.target.files, pendingPhase)
+    e.target.value = ''
+  }
+
+  // ─── Download ───
+  const downloadPhoto = async (photo: ApiPhoto) => {
+    try {
+      const res = await fetch(photo.url)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `castalia-${photo.id}.${photo.url.split('.').pop() || 'jpg'}`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast({ title: 'Error al descargar', variant: 'destructive' })
+    }
+  }
+
+  const downloadSelected = async () => {
+    const selected = filteredPhotos.filter(p => selectedIds.has(p.id))
+    for (const photo of selected) {
+      await downloadPhoto(photo)
+      await new Promise(r => setTimeout(r, 300))
+    }
+    toast({ title: `${selected.length} foto(s) descargada(s)` })
+  }
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  // ─── Share Link ───
+  const generateShareLink = async () => {
+    if (!selectedProjectId || !currentUser) return
+    try {
+      const res = await fetch('/api/shares', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: selectedProjectId, createdBy: currentUser.id }),
+      })
+      if (!res.ok) throw new Error()
+      const { share } = await res.json()
+      const link = `${window.location.origin}/upload?token=${share.token}`
+      setShareLink(link)
+      navigator.clipboard.writeText(link).then(() => {
+        setCopied(true)
+        toast({ title: 'Link copiado', description: 'Envialo a tu trabajador' })
+        setTimeout(() => setCopied(false), 2000)
+      })
+    } catch {
+      toast({ title: 'Error al generar link', variant: 'destructive' })
+    }
+  }
+
+  // ─── Draw handlers ───
   const initDrawCanvas = useCallback(() => {
     const canvas = drawCanvasRef.current
     if (!canvas || lightboxIdx === null) return
@@ -131,10 +234,7 @@ export default function ProjectDetailPage() {
     return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY }
   }
 
-  const handleDrawStart = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault(); setIsDrawing(true)
-    const pos = getDrawPos(e); lastDrawPos.current = pos
-  }
+  const handleDrawStart = (e: React.MouseEvent | React.TouchEvent) => { e.preventDefault(); setIsDrawing(true); const pos = getDrawPos(e); lastDrawPos.current = pos }
   const handleDrawMove = (e: React.MouseEvent | React.TouchEvent) => {
     const canvas = drawCanvasRef.current
     if (!isDrawing || !lastDrawPos.current || !canvas) return
@@ -156,6 +256,14 @@ export default function ProjectDetailPage() {
     } catch { toast({ title: 'Error al eliminar', variant: 'destructive' }) }
   }
 
+  // Hidden file inputs
+  const fileInputs = (
+    <>
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onFileChange} />
+      <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} multiple />
+    </>
+  )
+
   if (!selectedProjectId || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: '#F7F8FA' }}>
@@ -168,26 +276,45 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="min-h-screen" style={{ background: '#F7F8FA' }}>
+      {fileInputs}
+
       {/* Header */}
       <div className="sticky top-0 z-30 border-b" style={{ background: 'rgba(247,248,250,0.9)', backdropFilter: 'blur(16px)', borderColor: '#E2E6EB' }}>
-        <div className="max-w-7xl mx-auto px-4 lg:px-8 h-[72px] flex items-center gap-4">
-          <button onClick={goBack} className="p-2.5 rounded-xl hover:bg-black/5 transition-colors">
+        <div className="max-w-7xl mx-auto px-4 lg:px-8 h-[72px] flex items-center gap-3">
+          <button onClick={goBack} className="p-2.5 rounded-xl hover:bg-black/5 transition-colors shrink-0">
             <ArrowLeft className="w-5 h-5" style={{ color: '#35414A' }} />
           </button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-[20px] lg:text-[24px] font-bold tracking-[-0.02em] truncate" style={{ color: '#1A2332' }}>
+            <h1 className="text-[18px] lg:text-[22px] font-bold tracking-[-0.02em] truncate" style={{ color: '#1A2332' }}>
               {project?.name || 'Cargando...'}
             </h1>
           </div>
-          {currentUser && (
-            <Button onClick={() => openUploadModal(selectedProjectId || '')} className="h-10 px-5 rounded-xl text-[13px] font-semibold text-white border-0 gap-2"
-              style={{ background: 'linear-gradient(135deg, #38C5B5, #2DA194)' }}>
-              <Camera className="w-4 h-4" strokeWidth={2.5} />
-              <span className="hidden sm:inline">Subir Fotos</span>
-            </Button>
-          )}
+          <button onClick={generateShareLink} className="h-9 px-3 rounded-lg border flex items-center gap-1.5 text-[12px] font-semibold shrink-0"
+            style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>
+            <Share2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Compartir</span>
+          </button>
         </div>
       </div>
+
+      {/* Share link banner */}
+      <AnimatePresence>
+        {shareLink && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden border-b" style={{ borderColor: '#E2E6EB', background: '#F0FDFA' }}>
+            <div className="max-w-7xl mx-auto px-4 lg:px-8 py-3 flex items-center gap-3">
+              <Link2 className="w-4 h-4 shrink-0" style={{ color: '#2DA194' }} />
+              <p className="text-[12px] truncate flex-1" style={{ color: '#115E59' }}>{shareLink}</p>
+              <button onClick={() => { navigator.clipboard.writeText(shareLink); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+                className="h-7 px-2.5 rounded-md text-[11px] font-bold text-white shrink-0 flex items-center gap-1"
+                style={{ background: copied ? '#2DA194' : '#38C5B5' }}>
+                {copied ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                {copied ? 'Copiado' : 'Copiar'}
+              </button>
+              <button onClick={() => setShareLink(null)} className="p-1"><X className="w-3.5 h-3.5" style={{ color: '#5D7380' }} /></button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-6">
         {/* Progress bar */}
@@ -200,6 +327,59 @@ export default function ProjectDetailPage() {
             <motion.div initial={{ width: 0 }} animate={{ width: `${project?.progress ?? 0}%` }} transition={{ duration: 0.8 }} className="h-full rounded-full" style={{ background: 'linear-gradient(90deg, #38C5B5, #2DA194)' }} />
           </div>
         </div>
+
+        {/* Quick Phase Upload Buttons */}
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          <button onClick={() => { setPendingPhase('antes'); cameraRef.current?.click() }} disabled={uploading}
+            className="rounded-2xl p-4 text-center border-2 transition-all disabled:opacity-50 active:scale-[0.97]"
+            style={{ borderColor: '#F0A030', background: 'linear-gradient(135deg, #FFF7ED, #FFEDD5)' }}>
+            <div className="flex items-center justify-center gap-2 mb-0.5">
+              <Camera className="w-5 h-5" style={{ color: '#F0A030' }} />
+              <span className="text-[15px] font-bold" style={{ color: '#92400E' }}>ANTES</span>
+            </div>
+            <p className="text-[11px]" style={{ color: '#B45309' }}>Tomar foto o elegir de galería</p>
+          </button>
+
+          <button onClick={() => { setPendingPhase('despues'); cameraRef.current?.click() }} disabled={uploading}
+            className="rounded-2xl p-4 text-center border-2 transition-all disabled:opacity-50 active:scale-[0.97]"
+            style={{ borderColor: '#2DA194', background: 'linear-gradient(135deg, #F0FDFA, #CCFBF1)' }}>
+            <div className="flex items-center justify-center gap-2 mb-0.5">
+              <Camera className="w-5 h-5" style={{ color: '#2DA194' }} />
+              <span className="text-[15px] font-bold" style={{ color: '#115E59' }}>DESPUÉS</span>
+            </div>
+            <p className="text-[11px]" style={{ color: '#0F766E' }}>Tomar foto o elegir de galería</p>
+          </button>
+        </div>
+
+        {/* Gallery upload buttons (secondary) */}
+        <div className="flex gap-2 mb-6">
+          <button onClick={() => { setPendingPhase('antes'); galleryRef.current?.click() }} disabled={uploading}
+            className="flex-1 h-9 rounded-lg text-[12px] font-semibold border flex items-center justify-center gap-1.5 disabled:opacity-50"
+            style={{ borderColor: '#F0A030', color: '#92400E', background: '#FFFBF5' }}>
+            <ImagePlus className="w-3.5 h-3.5" /> Galería ANTES
+          </button>
+          <button onClick={() => { setPendingPhase('despues'); galleryRef.current?.click() }} disabled={uploading}
+            className="flex-1 h-9 rounded-lg text-[12px] font-semibold border flex items-center justify-center gap-1.5 disabled:opacity-50"
+            style={{ borderColor: '#2DA194', color: '#115E59', background: '#F7FDFC' }}>
+            <ImagePlus className="w-3.5 h-3.5" /> Galería DESPUÉS
+          </button>
+          {selectMode && (
+            <button onClick={selectedIds.size > 0 ? downloadSelected : () => { setSelectMode(false); setSelectedIds(new Set()) }}
+              className="h-9 px-4 rounded-lg text-[12px] font-bold text-white flex items-center gap-1.5 shrink-0"
+              style={{ background: selectedIds.size > 0 ? '#38C5B5' : '#6B7280' }}>
+              <Download className="w-3.5 h-3.5" />
+              {selectedIds.size > 0 ? `Descargar ${selectedIds.size}` : 'Cancelar'}
+            </button>
+          )}
+        </div>
+
+        {/* Uploading indicator */}
+        {uploading && (
+          <div className="flex items-center justify-center gap-2 mb-4 p-3 rounded-xl" style={{ background: '#F0FDFA', border: '1px solid #99F6E4' }}>
+            <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#38C5B5', borderTopColor: 'transparent' }} />
+            <span className="text-sm font-semibold" style={{ color: '#115E59' }}>Subiendo fotos...</span>
+          </div>
+        )}
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -221,6 +401,12 @@ export default function ProjectDetailPage() {
                 )}
               </TabsTrigger>
             ))}
+            {/* Select mode toggle */}
+            <button onClick={() => { setSelectMode(!selectMode); setSelectedIds(new Set()) }}
+              className="ml-auto px-3 py-2 rounded-lg text-[12px] font-semibold transition-all"
+              style={{ color: selectMode ? '#38C5B5' : '#ADB5B7', background: selectMode ? '#F0FDFA' : 'transparent' }}>
+              Seleccionar
+            </button>
           </TabsList>
 
           {/* Gallery Tab */}
@@ -246,16 +432,33 @@ export default function ProjectDetailPage() {
               {filteredPhotos.map((photo, i) => {
                 const phase = getPhase(photo)
                 const local = getLocal(photo)
+                const isSelected = selectedIds.has(photo.id)
                 return (
                   <motion.div key={photo.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
-                    onClick={() => setLightboxIdx(i)}
-                    className="relative group rounded-xl overflow-hidden border cursor-pointer aspect-[4/3]" style={{ borderColor: '#E8EBF0' }}>
-                    <img src={photo.thumbnailUrl || photo.url} alt={photo.caption || ''} className="w-full h-full object-cover" loading="lazy" />
-                    <div className="absolute top-2 left-2 flex flex-col gap-1">
+                    className="relative group rounded-xl overflow-hidden border aspect-[4/3]"
+                    style={{ borderColor: isSelected ? '#38C5B5' : '#E8EBF0' }}>
+                    <img src={photo.thumbnailUrl || photo.url} alt={photo.caption || ''} className="w-full h-full object-cover cursor-pointer" loading="lazy"
+                      onClick={() => selectMode ? toggleSelect(photo.id) : setLightboxIdx(i)} />
+                    {/* Phase badge */}
+                    <div className="absolute top-2 left-2 flex flex-col gap-1 pointer-events-none">
                       {phase && <span className="px-2 py-0.5 rounded-md text-[10px] font-bold text-white" style={{ background: phase === 'antes' ? '#F0A030' : '#2DA194' }}>{phase === 'antes' ? 'ANTES' : 'DESPUÉS'}</span>}
                       {local && <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold text-white" style={{ background: 'rgba(26,35,50,0.7)' }}>{local}</span>}
                     </div>
-                    {photo.caption && <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/60 to-transparent"><p className="text-[11px] text-white font-medium truncate">{photo.caption}</p></div>}
+                    {/* Download button (bottom right) */}
+                    <button onClick={(e) => { e.stopPropagation(); downloadPhoto(photo) }}
+                      className="absolute bottom-2 right-2 h-7 w-7 rounded-lg flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                      <Download className="w-3.5 h-3.5 text-white" />
+                    </button>
+                    {/* Select checkbox */}
+                    {selectMode && (
+                      <div className="absolute top-2 right-2" onClick={(e) => { e.stopPropagation(); toggleSelect(photo.id) }}>
+                        <div className="h-6 w-6 rounded-md border-2 flex items-center justify-center transition-all"
+                          style={{ borderColor: isSelected ? '#38C5B5' : 'rgba(255,255,255,0.6)', background: isSelected ? '#38C5B5' : 'rgba(0,0,0,0.3)' }}>
+                          {isSelected && <CheckCircle className="w-4 h-4 text-white" />}
+                        </div>
+                      </div>
+                    )}
+                    {photo.caption && <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/60 to-transparent pointer-events-none"><p className="text-[11px] text-white font-medium truncate">{photo.caption}</p></div>}
                   </motion.div>
                 )
               })}
@@ -264,7 +467,7 @@ export default function ProjectDetailPage() {
               <div className="text-center py-16">
                 <Camera className="w-10 h-10 mx-auto mb-3" style={{ color: '#ADB5B7' }} />
                 <p className="text-[15px] font-semibold" style={{ color: '#35414A' }}>Sin fotos</p>
-                <p className="text-[13px] mt-1" style={{ color: '#ADB5B7' }}>Toca &quot;Subir Fotos&quot; para comenzar</p>
+                <p className="text-[13px] mt-1" style={{ color: '#ADB5B7' }}>Toca ANTES o DESPUÉS para comenzar</p>
               </div>
             )}
           </TabsContent>
@@ -317,13 +520,15 @@ export default function ProjectDetailPage() {
       <AnimatePresence>
         {lightboxIdx !== null && currentLightboxPhoto && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black flex flex-col">
-            {/* Top bar */}
             <div className="flex items-center justify-between px-4 py-3 bg-black/80 z-10">
               <div className="flex-1 min-w-0">
                 <p className="text-white text-sm font-semibold truncate">{currentLightboxPhoto.caption || 'Foto'}</p>
                 <p className="text-white/50 text-xs">{lightboxIdx + 1} / {filteredPhotos.length}</p>
               </div>
               <div className="flex items-center gap-2">
+                <button onClick={() => downloadPhoto(currentLightboxPhoto)} className="h-9 w-9 rounded-full flex items-center justify-center bg-white/15" title="Descargar">
+                  <Download className="h-4 w-4 text-white" />
+                </button>
                 <button onClick={() => { setDrawMode(!drawMode); if (!drawMode) setTimeout(initDrawCanvas, 50) }} className="h-9 w-9 rounded-full flex items-center justify-center" style={{ background: drawMode ? '#38C5B5' : 'rgba(255,255,255,0.15)' }}>
                   <Pencil className="h-4 w-4 text-white" />
                 </button>
@@ -339,7 +544,6 @@ export default function ProjectDetailPage() {
               </div>
             </div>
 
-            {/* Draw toolbar */}
             {drawMode && (
               <div className="flex items-center gap-2 px-4 py-2 bg-black/80 z-10">
                 {['#ef4444', '#f97316', '#eab308', '#22c55e', '#38C5B5', '#3b82f6', '#8b5cf6', '#ffffff'].map(c => (
@@ -349,7 +553,6 @@ export default function ProjectDetailPage() {
               </div>
             )}
 
-            {/* Image / Canvas */}
             <div className="flex-1 relative flex items-center justify-center overflow-hidden">
               {drawMode ? (
                 <canvas ref={drawCanvasRef} className="max-w-full max-h-full object-contain"
@@ -358,8 +561,6 @@ export default function ProjectDetailPage() {
               ) : (
                 <img src={currentLightboxPhoto.url} alt="" className="max-w-full max-h-full object-contain" />
               )}
-
-              {/* Nav arrows */}
               {!drawMode && (
                 <>
                   <button onClick={() => setLightboxIdx((lightboxIdx - 1 + filteredPhotos.length) % filteredPhotos.length)}
@@ -374,7 +575,6 @@ export default function ProjectDetailPage() {
               )}
             </div>
 
-            {/* Info panel */}
             <AnimatePresence>
               {showInfo && (
                 <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="bg-black/90 overflow-hidden">
