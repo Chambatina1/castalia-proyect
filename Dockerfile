@@ -8,7 +8,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 
 # ══════════════════════════════════════════════════════════════
-#  Stage 2 – Build
+#  Stage 2 – Build + Create initialized database
 # ══════════════════════════════════════════════════════════════
 FROM node:20-alpine AS builder
 RUN apk add --no-cache libc6-compat
@@ -22,10 +22,16 @@ RUN npx prisma generate
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+
+# Create the database with all tables
+ENV DATABASE_URL="file:/app/prisma/custom.db"
+RUN npx prisma db push --skip-generate --accept-data-loss
+
+# Build the Next.js app
 RUN npm run build
 
 # ══════════════════════════════════════════════════════════════
-#  Stage 3 – Production runner
+#  Stage 3 – Production runner (minimal, no Prisma CLI needed)
 # ══════════════════════════════════════════════════════════════
 FROM node:20-alpine AS runner
 RUN apk add --no-cache libc6-compat
@@ -39,16 +45,19 @@ ENV HOSTNAME="0.0.0.0"
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
+# Copy standalone output + static assets + public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
-RUN mkdir -p /data && chown nextjs:nodejs /data
+# Copy initialized database as template
+COPY --from=builder /app/prisma/custom.db /app/template.db
+
+# Persistent data directory for SQLite
+RUN mkdir -p /data && chown -R nextjs:nodejs /data /app/template.db
 
 USER nextjs
 EXPOSE 10000
 
-CMD ["sh", "-c", "npx prisma db push --skip-generate --accept-data-loss 2>/dev/null; node server.js"]
+# If no DB exists yet, copy from the initialized template
+CMD ["sh", "-c", "if [ ! -f /data/custom.db ]; then cp /app/template.db /data/custom.db && chmod 644 /data/custom.db; fi; node server.js"]
