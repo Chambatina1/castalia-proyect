@@ -62,32 +62,37 @@ async function uploadFileToDropbox(
   token: string,
   localPath: string,
   dropboxPath: string
-): Promise<boolean> {
+): Promise<{ ok: boolean; error?: string }> {
   try {
     const fileBuffer = await readFile(localPath);
+    const dropboxArg = JSON.stringify({
+      path: dropboxPath,
+      mode: 'overwrite',
+      autorename: true,
+      mute: true,
+    });
+
     const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/octet-stream',
-        'Dropbox-API-Arg': JSON.stringify({
-          path: dropboxPath,
-          mode: 'overwrite',
-          autorename: true,
-          mute: true,
-        }),
+        'Dropbox-API-Arg': dropboxArg,
       },
       body: fileBuffer,
     });
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error(`Dropbox upload failed for ${dropboxPath}: ${response.status} ${errText}`);
+      const errMsg = `${response.status} ${errText}`;
+      console.error(`Dropbox upload failed for ${dropboxPath}: ${errMsg}`);
+      return { ok: false, error: errMsg };
     }
-    return response.ok;
+    return { ok: true };
   } catch (err) {
-    console.error(`Dropbox upload error for ${dropboxPath}:`, err);
-    return false;
+    const errMsg = String(err);
+    console.error(`Dropbox upload error for ${dropboxPath}:`, errMsg);
+    return { ok: false, error: errMsg };
   }
 }
 
@@ -339,8 +344,8 @@ export async function POST(request: NextRequest) {
               const ext = localFile.split('.').pop() || 'jpg';
               const dropboxFile = sanitize(photo.caption || photo.fileName || `foto-${photo.sortOrder}`);
               const dropboxPath = `${folder}/${dropboxFile}.${ext}`;
-              const ok = await uploadFileToDropbox(config!.accessToken, localFile, dropboxPath);
-              if (ok) uploaded++; else { failed++; errors.push(`${basename(localFile)}: upload failed`); }
+              const result = await uploadFileToDropbox(config!.accessToken, localFile, dropboxPath);
+              if (result.ok) uploaded++; else { failed++; errors.push(`${basename(localFile)}: ${result.error || 'upload failed'}`); }
             } else {
               failed++;
               errors.push(`${photo.url} → ${localFile} not found (uploads dir has ${uploadFiles.length} files)`);
@@ -420,14 +425,14 @@ export async function POST(request: NextRequest) {
       const fileName = sanitize(photo.caption || photo.fileName || `foto-${Date.now()}`);
       const dropboxPath = `${dropboxDir}/${fileName}.${ext}`;
 
-      const ok = await uploadFileToDropbox(config.accessToken, localFile, dropboxPath);
+      const result = await uploadFileToDropbox(config.accessToken, localFile, dropboxPath);
 
       // Also backup DB after each photo upload
-      if (ok) {
+      if (result.ok) {
         try { await backupDatabaseToDropbox(config.accessToken); } catch {}
       }
 
-      return NextResponse.json({ success: ok });
+      return NextResponse.json({ success: result.ok, error: result.error });
     }
 
     // ─── BACKUP DATABASE (export all data as JSON to Dropbox) ───
