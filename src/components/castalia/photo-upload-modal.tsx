@@ -12,11 +12,7 @@ import {
   MapPin,
   Send,
   ImageIcon,
-  RotateCcw,
-  FlipHorizontal2,
-  Zap,
   Sparkles,
-  Hammer,
   Sofa,
   BedDouble,
   ChefHat,
@@ -24,11 +20,9 @@ import {
   DoorOpen,
   Trees,
   Stairs,
-  Shirt,
   Building2,
   Lamp,
   Briefcase,
-  Home,
 } from 'lucide-react';
 import { useAppStore } from '@/store/app-store';
 import {
@@ -54,29 +48,26 @@ const LOCALES = [
   { id: 'bano',              label: 'Baño',               icon: Bath },
   { id: 'lobby',             label: 'Lobby / Entrada',    icon: DoorOpen },
   { id: 'oficina',           label: 'Oficina',            icon: Briefcase },
-  { id: 'terraza',           label: 'Terraza',            icon: Trees },
+  { id: 'balcon',            label: 'Balcón / Terraza',   icon: Trees },
+  { id: 'escalera',          label: 'Escalera',           icon: Stairs },
+  { id: 'vestidor',          label: 'Vestidor',           icon: Sofa },
+  { id: 'area_servicio',     label: 'Área de Servicio',   icon: Lamp },
   { id: 'jardin',            label: 'Jardín',             icon: Trees },
-  { id: 'escaleras',         label: 'Escaleras',          icon: Stairs },
-  { id: 'closet',            label: 'Closet / Vestidor',  icon: Shirt },
-  { id: 'fachada',           label: 'Fachada',            icon: Building2 },
-  { id: 'estacionamiento',   label: 'Estacionamiento',   icon: Home },
-  { id: 'area_servicio',     label: 'Área de Servicio',   icon: Hammer },
-  { id: 'sala_tv',           label: 'Sala de TV',         icon: Lamp },
-  { id: 'bar',               label: 'Bar',                icon: Sparkles },
-  { id: 'gimnasio',          label: 'Gimnasio',           icon: Home },
-  { id: 'otro',              label: 'Otro',               icon: Home },
-] as const;
+  { id: 'garaje',            label: 'Garaje',             icon: Building2 },
+  { id: 'fachada',           label: 'Fachada / Exterior', icon: Building2 },
+  { id: 'pasillo',           label: 'Pasillo',            icon: DoorOpen },
+  { id: 'comedor_diario',    label: 'Comedor Diario',     icon: ChefHat },
+  { id: 'sala_estar',        label: 'Sala de Estar',      icon: Sofa },
+  { id: 'otro',              label: 'Otro',               icon: MapPin },
+];
 
 /* ═══════════════════════════════════════════════════════════════ */
 
 type FaseFoto = 'antes' | 'despues' | null;
 type Step = 1 | 2;
 
-type ViewMode = 'menu' | 'camera' | 'gallery';
-
 interface CapturedPhoto {
   dataUrl: string;
-  blob: Blob;
   file: File;
 }
 
@@ -84,17 +75,13 @@ export default function PhotoUploadModal() {
   const { uploadModalOpen, uploadProjectId, closeUploadModal, currentUser } = useAppStore();
   const { toast } = useToast();
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Two separate file inputs: one with capture (camera), one without (gallery)
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   // ── State ──
   const [step, setStep] = useState<Step>(1);
-  const [viewMode, setViewMode] = useState<ViewMode>('menu');
   const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
-  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
-  const [cameraError, setCameraError] = useState('');
   const [fase, setFase] = useState<FaseFoto>(null);
   const [local, setLocal] = useState<string>('');
   const [localSearch, setLocalSearch] = useState('');
@@ -102,89 +89,26 @@ export default function PhotoUploadModal() {
   const [caption, setCaption] = useState('');
   const [isUrgent, setIsUrgent] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [flashVisible, setFlashVisible] = useState(false);
 
-  // ── Camera control ──
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-  }, []);
-
-  const startCamera = useCallback(async (facing: 'environment' | 'user') => {
-    stopCamera();
-    setCameraError('');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: facing,
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        },
-        audio: false,
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-      }
-      setViewMode('camera');
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'No se pudo acceder a la cámara';
-      setCameraError(msg);
-      // Fallback to file input on desktop
-      fileInputRef.current?.click();
-    }
-  }, [stopCamera]);
-
-  // Cleanup camera on unmount / dialog close
-  useEffect(() => {
-    return () => stopCamera();
-  }, [stopCamera]);
-
-  const toggleCamera = () => {
-    const next = facingMode === 'environment' ? 'user' : 'environment';
-    setFacingMode(next);
-    startCamera(next);
-  };
-
-  // ── Capture photo from live camera ──
-  const capturePhoto = useCallback(() => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return;
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(video, 0, 0);
-
-    // Flash effect
-    setFlashVisible(true);
-    setTimeout(() => setFlashVisible(false), 150);
-
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      const file = new File([blob], `foto-${Date.now()}.jpg`, { type: 'image/jpeg' });
-      setPhotos((prev) => [...prev, { dataUrl, blob, file }]);
-      setViewMode('menu');
-      stopCamera();
-    }, 'image/jpeg', 0.85);
-  }, [stopCamera]);
-
-  // ── Gallery handling ──
-  const handleGalleryFiles = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+  // ── File handlers ──
+  const processFiles = useCallback((files: FileList | null) => {
     if (!files) return;
     Array.from(files).forEach((file) => {
+      if (!file.type.startsWith('image/')) return;
       const dataUrl = URL.createObjectURL(file);
-      setPhotos((prev) => [...prev, { dataUrl, blob: file, file }]);
+      setPhotos((prev) => [...prev, { dataUrl, file }]);
     });
-    e.target.value = '';
   }, []);
+
+  const handleCameraCapture = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    processFiles(e.target.files);
+    e.target.value = '';
+  }, [processFiles]);
+
+  const handleGallerySelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    processFiles(e.target.files);
+    e.target.value = '';
+  }, [processFiles]);
 
   const removePhoto = (index: number) => {
     setPhotos((prev) => {
@@ -203,7 +127,6 @@ export default function PhotoUploadModal() {
   // ── Reset ──
   const resetForm = useCallback(() => {
     setStep(1);
-    setViewMode('menu');
     setPhotos([]);
     setFase(null);
     setLocal('');
@@ -212,14 +135,11 @@ export default function PhotoUploadModal() {
     setCaption('');
     setIsUrgent(false);
     setIsSubmitting(false);
-    setCameraError('');
-    stopCamera();
-  }, [stopCamera]);
+  }, []);
 
   const handleClose = () => {
-    stopCamera();
     closeUploadModal();
-    setTimeout(resetForm, 200);
+    setTimeout(resetForm, 250);
   };
 
   // ── Submit ──
@@ -259,15 +179,25 @@ export default function PhotoUploadModal() {
   return (
     <Dialog open={uploadModalOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="sm:max-w-lg max-h-[92vh] flex flex-col p-0 gap-0 overflow-hidden rounded-2xl">
-        {/* ── Hidden canvas for capture ── */}
-        <canvas ref={canvasRef} className="hidden" />
+
+        {/* ── Hidden file inputs ── */}
+        {/* This input opens the device camera directly on mobile (capture="environment") */}
         <input
-          ref={fileInputRef}
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handleCameraCapture}
+        />
+        {/* This input opens the device photo gallery */}
+        <input
+          ref={galleryInputRef}
           type="file"
           multiple
           accept="image/*"
           className="hidden"
-          onChange={handleGalleryFiles}
+          onChange={handleGallerySelect}
         />
 
         {/* ── Header ── */}
@@ -275,113 +205,32 @@ export default function PhotoUploadModal() {
           <div>
             <DialogTitle className="text-lg font-bold text-foreground flex items-center gap-2">
               <Camera className="h-5 w-5 text-primary" />
-              {viewMode === 'camera'
-                ? 'Cámara'
-                : step === 1
-                  ? 'Tomar Foto'
-                  : 'Clasificar Fotos'}
+              {step === 1 ? 'Tomar Foto' : 'Clasificar Fotos'}
             </DialogTitle>
             <p className="text-sm text-muted-foreground mt-0.5">
-              {viewMode === 'camera'
-                ? 'Apunta y toma la foto'
-                : step === 1
-                  ? `${photos.length} foto(s) capturada(s)`
-                  : 'Indica la fase y el local'}
+              {step === 1
+                ? `${photos.length} foto(s) capturada(s)`
+                : 'Indica la fase y el local'}
             </p>
           </div>
-          {viewMode === 'camera' ? (
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-white" onClick={() => { stopCamera(); setViewMode('menu'); }}>
-              <X className="h-4 w-4" />
-            </Button>
-          ) : (
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={handleClose}>
-              <X className="h-4 w-4" />
-            </Button>
-          )}
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={handleClose}>
+            <X className="h-4 w-4" />
+          </Button>
         </div>
 
-        {/* ── Step Indicator (hide in camera view) ── */}
-        {viewMode !== 'camera' && (
-          <div className="px-6 pb-3">
-            <div className="flex items-center gap-2">
-              <div className={`h-1 flex-1 rounded-full transition-colors duration-300 ${step >= 1 ? 'bg-primary' : 'bg-muted'}`} />
-              <div className={`h-1 flex-1 rounded-full transition-colors duration-300 ${step >= 2 ? 'bg-primary' : 'bg-muted'}`} />
-            </div>
+        {/* ── Step Indicator ── */}
+        <div className="px-6 pb-3">
+          <div className="flex items-center gap-2">
+            <div className={`h-1 flex-1 rounded-full transition-colors duration-300 ${step >= 1 ? 'bg-primary' : 'bg-muted'}`} />
+            <div className={`h-1 flex-1 rounded-full transition-colors duration-300 ${step >= 2 ? 'bg-primary' : 'bg-muted'}`} />
           </div>
-        )}
+        </div>
 
         <div className="flex-1 overflow-hidden relative">
           <AnimatePresence mode="wait">
-            {/* ═══════════════════ CAMERA VIEWFINDER ═══════════════════ */}
-            {viewMode === 'camera' && (
-              <motion.div
-                key="camera"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="absolute inset-0 flex flex-col bg-black"
-              >
-                {/* Camera error */}
-                {cameraError && (
-                  <div className="flex-1 flex items-center justify-center text-white/70 text-sm p-6 text-center">
-                    {cameraError}
-                  </div>
-                )}
-
-                {/* Video feed */}
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="flex-1 object-cover w-full"
-                  style={{ transform: facingMode === 'user' ? 'scaleX(-1)' : 'none' }}
-                />
-
-                {/* Flash overlay */}
-                <AnimatePresence>
-                  {flashVisible && (
-                    <motion.div
-                      initial={{ opacity: 0.8 }}
-                      animate={{ opacity: 0 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute inset-0 bg-white z-30 pointer-events-none"
-                    />
-                  )}
-                </AnimatePresence>
-
-                {/* Camera controls overlay */}
-                <div className="relative bg-black/80 px-6 py-5 flex items-center justify-between">
-                  {/* Switch camera */}
-                  <button
-                    onClick={toggleCamera}
-                    className="h-11 w-11 rounded-full bg-white/15 flex items-center justify-center active:scale-90 transition-transform"
-                  >
-                    <RotateCcw className="h-5 w-5 text-white" />
-                  </button>
-
-                  {/* Capture button */}
-                  <button
-                    onClick={capturePhoto}
-                    className="h-[72px] w-[72px] rounded-full border-4 border-white/80 bg-white/20 flex items-center justify-center active:scale-90 transition-transform"
-                  >
-                    <div className="h-[56px] w-[56px] rounded-full bg-white" />
-                  </button>
-
-                  {/* Close camera */}
-                  <button
-                    onClick={() => { stopCamera(); setViewMode('menu'); }}
-                    className="h-11 w-11 rounded-full bg-white/15 flex items-center justify-center active:scale-90 transition-transform"
-                  >
-                    <X className="h-5 w-5 text-white" />
-                  </button>
-                </div>
-              </motion.div>
-            )}
 
             {/* ═══════════════════ STEP 1: TAKE / SELECT PHOTOS ═══════════════════ */}
-            {viewMode !== 'camera' && step === 1 && (
+            {step === 1 && (
               <motion.div
                 key="step1"
                 initial={{ opacity: 0, x: -20 }}
@@ -393,7 +242,7 @@ export default function PhotoUploadModal() {
                   <div className="pb-6 space-y-5">
                     {/* Big Camera Button — PRIMARY ACTION */}
                     <button
-                      onClick={() => startCamera(facingMode)}
+                      onClick={() => cameraInputRef.current?.click()}
                       className="w-full flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 p-8 transition-all hover:border-primary/70 hover:bg-primary/10 active:scale-[0.98]"
                     >
                       <div className="h-16 w-16 rounded-full bg-primary/15 flex items-center justify-center">
@@ -412,7 +261,7 @@ export default function PhotoUploadModal() {
 
                     {/* Gallery button */}
                     <button
-                      onClick={() => fileInputRef.current?.click()}
+                      onClick={() => galleryInputRef.current?.click()}
                       className="w-full flex items-center justify-center gap-3 rounded-xl border border-border bg-card p-4 transition-all hover:bg-muted/50 active:scale-[0.98]"
                     >
                       <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
@@ -431,7 +280,7 @@ export default function PhotoUploadModal() {
                           <AnimatePresence>
                             {photos.map((p, i) => (
                               <motion.div
-                                key={i}
+                                key={p.dataUrl}
                                 layout
                                 initial={{ opacity: 0, scale: 0.85 }}
                                 animate={{ opacity: 1, scale: 1 }}
@@ -472,7 +321,7 @@ export default function PhotoUploadModal() {
             )}
 
             {/* ═══════════════════ STEP 2: CLASSIFY ═══════════════════ */}
-            {viewMode !== 'camera' && step === 2 && (
+            {step === 2 && (
               <motion.div
                 key="step2"
                 initial={{ opacity: 0, x: 20 }}
