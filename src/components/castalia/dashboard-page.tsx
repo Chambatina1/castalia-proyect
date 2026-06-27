@@ -365,7 +365,11 @@ export default function DashboardPage() {
                       {project.coverImage && (
                         <img src={project.coverImage} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                       )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+                      {/* Project name overlay on cover */}
+                      <div className="absolute bottom-3 left-3 right-12">
+                        <h3 className="text-[15px] font-bold text-white leading-tight drop-shadow-lg line-clamp-2">{project.name}</h3>
+                      </div>
                       <div className="absolute top-3 left-3 flex gap-1.5">
                         {STATUS_CONFIG[project.status] && (
                           <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg border backdrop-blur-sm"
@@ -394,10 +398,7 @@ export default function DashboardPage() {
                     </div>
 
                     {/* Info */}
-                    <div className="p-4">
-                      <h3 className="text-[16px] font-bold tracking-[-0.01em] mb-1 line-clamp-1" style={{ color: '#1A2332' }}>
-                        {project.name}
-                      </h3>
+                    <div className="px-4 pb-4 pt-1">
                       <p className="text-[13px] font-medium mb-1" style={{ color: '#38C5B5' }}>{project.clientName}</p>
                       <div className="flex items-center gap-1.5 mb-3">
                         <MapPin className="w-3.5 h-3.5 shrink-0" style={{ color: '#ADB5B7' }} />
