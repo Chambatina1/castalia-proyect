@@ -17,6 +17,7 @@ import {
   PanelLeftOpen,
   LogOut,
   User as UserIcon,
+  Plus,
   X,
 } from 'lucide-react';
 
