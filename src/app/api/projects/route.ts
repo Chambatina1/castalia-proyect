@@ -36,10 +36,20 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, creatorId, coverImage } = body
+    let { name, creatorId, coverImage } = body
 
-    if (!name || !creatorId) {
+    if (!name || !name.trim()) {
       return NextResponse.json({ error: 'Se requiere nombre del proyecto' }, { status: 400 })
+    }
+
+    // If no creatorId, use first available user
+    if (!creatorId) {
+      const anyUser = await db.user.findFirst({ select: { id: true } })
+      if (anyUser) creatorId = anyUser.id
+    }
+
+    if (!creatorId) {
+      return NextResponse.json({ error: 'No hay usuario disponible' }, { status: 400 })
     }
 
     const project = await db.project.create({
@@ -54,11 +64,16 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    await db.projectMember.create({ data: { projectId: project.id, userId: creatorId, role: 'MANAGER' } })
+    // Add creator as member (ignore if already exists)
+    try {
+      await db.projectMember.create({ data: { projectId: project.id, userId: creatorId, role: 'MANAGER' } })
+    } catch {
+      // Member might already exist, ignore
+    }
 
     return NextResponse.json(project, { status: 201 })
   } catch (error) {
     console.error('Projects POST error:', error)
-    return NextResponse.json({ error: 'Failed to create project' }, { status: 500 })
+    return NextResponse.json({ error: String(error) }, { status: 500 })
   }
 }

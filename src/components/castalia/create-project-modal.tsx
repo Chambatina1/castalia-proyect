@@ -51,7 +51,10 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), creatorId: currentUser?.id }),
       });
-      if (!res.ok) throw new Error('No se pudo crear el proyecto');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'No se pudo crear el proyecto');
+      }
       const project = await res.json();
 
       // 2. Upload cover photo now that we have the projectId

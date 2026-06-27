@@ -57,26 +57,26 @@ export default function DashboardPage() {
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [expandedStat, setExpandedStat] = useState<string | null>(null)
 
+  const loadData = useCallback(async () => {
+    try {
+      const [projRes, actRes] = await Promise.allSettled([
+        fetch('/api/projects').then(r => r.json()),
+        fetch('/api/activity?limit=10').then(r => r.json()),
+      ])
+      if (projRes.status === 'fulfilled' && Array.isArray(projRes.value)) setProjects(projRes.value)
+      if (actRes.status === 'fulfilled' && Array.isArray(actRes.value)) {
+        setActivities(actRes.value.map((a: any) => ({
+          id: a.id, userName: a.user?.name || 'Usuario', action: a.action,
+          projectName: a.project?.name, projectId: a.project?.id, createdAt: a.createdAt,
+        })))
+      }
+    } catch {}
+    setLoading(false)
+  }, [])
+
   useEffect(() => {
-    async function loadData() {
-      try {
-        const [projRes, actRes, taskRes] = await Promise.allSettled([
-          fetch('/api/projects').then(r => r.json()),
-          fetch('/api/activity?limit=10').then(r => r.json()),
-          fetch('/api/tasks?status=PENDING').then(r => r.json()),
-        ])
-        if (projRes.status === 'fulfilled' && Array.isArray(projRes.value)) setProjects(projRes.value)
-        if (actRes.status === 'fulfilled' && Array.isArray(actRes.value)) {
-          setActivities(actRes.value.map((a: any) => ({
-            id: a.id, userName: a.user?.name || 'Usuario', action: a.action,
-            projectName: a.project?.name, projectId: a.project?.id, createdAt: a.createdAt,
-          })))
-        }
-      } catch {}
-      setLoading(false)
-    }
     if (currentUser) loadData()
-  }, [currentUser])
+  }, [currentUser, loadData])
 
   const filteredProjects = useMemo(() => {
     let result = projects
@@ -544,7 +544,7 @@ export default function DashboardPage() {
         </SheetContent>
       </Sheet>
 
-      <CreateProjectModal open={showCreateProject} onClose={() => setShowCreateProject(false)} />
+      <CreateProjectModal open={showCreateProject} onClose={() => setShowCreateProject(false)} onCreated={() => loadData()} />
 
       {/* Mobile FAB */}
       {isManagerOrAdmin() && (
