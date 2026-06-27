@@ -36,8 +36,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
     e.target.value = '';
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     if (!name.trim()) {
       toast({ title: 'Nombre requerido', description: 'Escribe un nombre para el proyecto', variant: 'destructive' });
       return;
@@ -110,7 +109,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
           </Button>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-6 pb-6 space-y-5">
+        <div className="px-6 pb-6 space-y-5">
           {/* Cover photo */}
           <div
             onClick={() => fileRef.current?.click()}
@@ -145,7 +144,8 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={handleClose} className="text-sm rounded-lg">Cancelar</Button>
             <Button
-              type="submit"
+              type="button"
+              onClick={handleSubmit}
               disabled={isSubmitting || !name.trim()}
               className="gap-2 h-10 px-6 text-sm font-semibold rounded-lg text-white"
               style={{ background: 'linear-gradient(135deg, #38C5B5, #2DA194)' }}
@@ -158,7 +158,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
               {isSubmitting ? 'Creando...' : 'Crear'}
             </Button>
           </div>
-        </form>
+        </div>
       </DialogContent>
     </Dialog>
   );
