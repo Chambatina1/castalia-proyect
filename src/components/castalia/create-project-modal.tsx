@@ -1,9 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import {
-  X, Plus, Camera, ImageIcon,
-} from 'lucide-react';
+import { X, Plus, Camera } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -19,8 +17,7 @@ interface Props { open: boolean; onClose: () => void; onCreated?: () => void }
 export default function CreateProjectModal({ open, onClose, onCreated }: Props) {
   const { currentUser } = useAppStore();
   const { toast } = useToast();
-  const cameraRef = useRef<HTMLInputElement>(null);
-  const galleryRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState('');
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
@@ -39,52 +36,64 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
     e.target.value = '';
   };
 
-  const handleCoverUpload = async (): Promise<string | null> => {
-    if (!coverFile) return null;
-    try {
-      const fd = new FormData();
-      fd.append('files', coverFile);
-      fd.append('projectId', '');
-      fd.append('caption', 'Portada');
-      fd.append('tags', '[]');
-      const res = await fetch('/api/photos', { method: 'POST', body: fd });
-      if (!res.ok) return null;
-      const data = await res.json();
-      return data.photos?.[0]?.url || null;
-    } catch { return null; }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       toast({ title: 'Nombre requerido', description: 'Escribe un nombre para el proyecto', variant: 'destructive' });
       return;
     }
+
     setIsSubmitting(true);
     try {
-      // Upload cover first if any
-      let coverUrl: string | null = null;
-      if (coverFile) coverUrl = await handleCoverUpload();
-
+      // 1. Create project first (no cover yet)
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), creatorId: currentUser?.id, coverImage: coverUrl }),
+        body: JSON.stringify({ name: name.trim(), creatorId: currentUser?.id }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error('No se pudo crear el proyecto');
+      const project = await res.json();
+
+      // 2. Upload cover photo now that we have the projectId
+      if (coverFile && project?.id) {
+        try {
+          const fd = new FormData();
+          fd.append('files', coverFile);
+          fd.append('projectId', project.id);
+          fd.append('uploadedBy', currentUser?.id || '');
+          fd.append('caption', 'Portada');
+          fd.append('tags', '[]');
+
+          const photoRes = await fetch('/api/photos', { method: 'POST', body: fd });
+          if (photoRes.ok) {
+            const photoData = await photoRes.json();
+            const coverUrl = photoData.photos?.[0]?.url;
+            if (coverUrl) {
+              // Update project with cover image
+              await fetch(`/api/projects/${project.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ coverImage: coverUrl }),
+              });
+            }
+          }
+        } catch {
+          // Cover upload failed but project was created — not critical
+        }
+      }
+
       toast({ title: 'Proyecto creado', description: name });
       handleClose();
       onCreated?.();
-    } catch {
-      toast({ title: 'Error', description: 'No se pudo crear', variant: 'destructive' });
+    } catch (err) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'No se pudo crear', variant: 'destructive' });
     } finally { setIsSubmitting(false); }
   };
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
       <DialogContent className="sm:max-w-sm p-0 gap-0 overflow-hidden rounded-2xl">
-        <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFile} />
-        <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFile} />
 
         <div className="flex items-center justify-between px-6 pt-5 pb-3">
           <DialogTitle className="text-lg font-bold flex items-center gap-2">
@@ -101,7 +110,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
         <form onSubmit={handleSubmit} className="px-6 pb-6 space-y-5">
           {/* Cover photo */}
           <div
-            onClick={() => cameraRef.current?.click()}
+            onClick={() => fileRef.current?.click()}
             className="w-full aspect-video rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 cursor-pointer transition-all hover:border-primary/70"
             style={{ borderColor: coverPreview ? 'transparent' : '#E2E6EB', background: coverPreview ? '#000' : '#F7F8FA' }}
           >
@@ -110,8 +119,8 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
             ) : (
               <>
                 <Camera className="h-8 w-8" style={{ color: '#ADB5B7' }} />
-                <span className="text-sm font-medium" style={{ color: '#5D7380' }}>Foto de portada</span>
-                <span className="text-xs" style={{ color: '#ADB5B7' }}>Toca para tomar foto</span>
+                <span className="text-sm font-medium" style={{ color: '#5D7380' }}>Foto de portada (opcional)</span>
+                <span className="text-xs" style={{ color: '#ADB5B7' }}>Toca para tomar foto o elegir</span>
               </>
             )}
           </div>
@@ -133,12 +142,17 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={handleClose} className="text-sm rounded-lg">Cancelar</Button>
             <Button
-              type="submit" disabled={isSubmitting || !name.trim()}
+              type="submit"
+              disabled={isSubmitting || !name.trim()}
               className="gap-2 h-10 px-6 text-sm font-semibold rounded-lg text-white"
               style={{ background: 'linear-gradient(135deg, #38C5B5, #2DA194)' }}
             >
-              <Plus className="h-4 w-4" strokeWidth={2.5} />
-              Crear
+              {isSubmitting ? (
+                <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" strokeWidth={2.5} />
+              )}
+              {isSubmitting ? 'Creando...' : 'Crear'}
             </Button>
           </div>
         </form>
