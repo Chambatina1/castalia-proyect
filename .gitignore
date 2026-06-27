@@ -58,4 +58,7 @@ server.log
 /scripts/*.json
 /download/
 db/*.db
-db/*.db-journal
+db/*.db-journaldb/
+*.db
+*.db-wal
+*.db-shm
