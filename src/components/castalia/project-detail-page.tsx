@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, MapPin, Calendar, Image, CheckSquare, MessageSquare, FileText, Clock, Camera, X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Pencil, Trash2, Eraser, Download, Share2, Copy, CheckCircle, ImagePlus, Link2, GripVertical, Save, StickyNote, Plus, FolderOpen, Folder, ChevronRight as ChevronRightIcon } from 'lucide-react'
+import { ArrowLeft, MapPin, Calendar, Image, CheckSquare, MessageSquare, FileText, Clock, Camera, X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Pencil, Trash2, Eraser, Download, Share2, Copy, CheckCircle, ImagePlus, Link2, GripVertical, Save, StickyNote, Plus, FolderOpen, Folder, ChevronRight as ChevronRightIcon, Cloud, Loader2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -91,6 +91,30 @@ export default function ProjectDetailPage() {
   const [renamingSubId, setRenamingSubId] = useState<string | null>(null)
   const [renameSubValue, setRenameSubValue] = useState('')
   const [assigningSubPhotoId, setAssigningSubPhotoId] = useState<string | null>(null)
+
+  // Dropbox sync
+  const [dropboxSyncing, setDropboxSyncing] = useState(false)
+  const syncToDropbox = async () => {
+    if (!selectedProjectId) return
+    setDropboxSyncing(true)
+    try {
+      const res = await fetch('/api/dropbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync-project', projectId: selectedProjectId }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast({ title: 'Sincronizado a Dropbox', description: data.message })
+      } else {
+        toast({ title: data.error || 'Error al sincronizar', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error de conexión con Dropbox', variant: 'destructive' })
+    } finally {
+      setDropboxSyncing(false)
+    }
+  }
 
   const getTags = (p: ApiPhoto) => { try { return JSON.parse(p.tags || '[]') } catch { return (p.tags || '').split(',').filter(Boolean) } }
   const getPhase = (p: ApiPhoto) => { const t = getTags(p); return t.includes('antes') ? 'antes' : t.includes('despues') ? 'despues' : null }
@@ -462,6 +486,11 @@ export default function ProjectDetailPage() {
             style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>
             <Share2 className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Compartir</span>
+          </button>
+          <button onClick={syncToDropbox} disabled={dropboxSyncing} className="h-9 px-3 rounded-lg border flex items-center gap-1.5 text-[12px] font-semibold shrink-0 disabled:opacity-50"
+            style={{ borderColor: '#E2E6EB', color: '#0061FF' }}>
+            {dropboxSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Cloud className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">Dropbox</span>
           </button>
           <button onClick={openNoteEditor} className="h-9 px-3 rounded-lg border flex items-center gap-1.5 text-[12px] font-semibold shrink-0"
             style={{ borderColor: '#E2E6EB', color: '#F0A030' }}>

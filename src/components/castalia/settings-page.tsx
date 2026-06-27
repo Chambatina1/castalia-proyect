@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Settings as SettingsIcon, User, Shield, Bell, Palette, Database, ChevronRight, Building2, Moon, Sun, Globe, Lock } from 'lucide-react'
+import { Settings as SettingsIcon, User, Shield, Bell, Palette, Database, ChevronRight, Building2, Moon, Sun, Globe, Lock, Cloud, CloudOff, RefreshCw, CheckCircle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,6 +21,7 @@ export default function SettingsPage() {
 
   const sections = [
     { id: 'profile', label: 'Perfil', icon: User },
+    { id: 'dropbox', label: 'Dropbox', icon: Cloud },
     { id: 'team', label: 'Equipo', icon: Shield },
     { id: 'notifications', label: 'Notificaciones', icon: Bell },
     { id: 'appearance', label: 'Apariencia', icon: Palette },
@@ -63,6 +64,7 @@ export default function SettingsPage() {
         {/* Content */}
         <div className="flex-1 min-w-0">
           {activeSection === 'profile' && <ProfileSection />}
+          {activeSection === 'dropbox' && <DropboxSection />}
           {activeSection === 'team' && <TeamSection />}
           {activeSection === 'notifications' && <NotificationsSection />}
           {activeSection === 'appearance' && <AppearanceSection />}
@@ -281,6 +283,168 @@ function AppearanceSection() {
               <Badge variant="outline" className="ml-auto text-xs">Predeterminado</Badge>
             </div>
           </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  )
+}
+
+function DropboxSection() {
+  const { toast } = useToast()
+  const [token, setToken] = useState('')
+  const [status, setStatus] = useState<'loading' | 'connected' | 'disconnected'>('loading')
+  const [accountName, setAccountName] = useState('')
+  const [accountEmail, setAccountEmail] = useState('')
+  const [connecting, setConnecting] = useState(false)
+
+  useEffect(() => {
+    checkStatus()
+  }, [])
+
+  const checkStatus = async () => {
+    try {
+      const res = await fetch('/api/dropbox')
+      const data = await res.json()
+      if (data.connected) {
+        setStatus('connected')
+        setAccountName(data.accountName || '')
+        setAccountEmail(data.accountEmail || '')
+      } else {
+        setStatus('disconnected')
+      }
+    } catch {
+      setStatus('disconnected')
+    }
+  }
+
+  const connect = async () => {
+    if (!token.trim()) return
+    setConnecting(true)
+    try {
+      const res = await fetch('/api/dropbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'connect', accessToken: token.trim() }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setStatus('connected')
+        setAccountName(data.accountName || '')
+        setAccountEmail(data.accountEmail || '')
+        setToken('')
+        toast({ title: 'Dropbox conectado', description: `Cuenta: ${data.accountName}` })
+      } else {
+        toast({ title: data.error || 'Error al conectar', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error de conexión', variant: 'destructive' })
+    } finally {
+      setConnecting(false)
+    }
+  }
+
+  const disconnect = async () => {
+    try {
+      await fetch('/api/dropbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'disconnect' }),
+      })
+      setStatus('disconnected')
+      setAccountName('')
+      setAccountEmail('')
+      toast({ title: 'Dropbox desconectado' })
+    } catch {
+      toast({ title: 'Error', variant: 'destructive' })
+    }
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+      <Card className="rounded-xl">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+            <Cloud className="h-5 w-5" style={{ color: '#0061FF' }} />
+            Conexión con Dropbox
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {/* Status */}
+          <div className="flex items-center justify-between p-3 rounded-xl border"
+            style={{
+              borderColor: status === 'connected' ? '#38C5B5' : '#E2E6EB',
+              background: status === 'connected' ? '#F0FDFA' : '#FAFAFA',
+            }}>
+            <div className="flex items-center gap-3">
+              {status === 'loading' ? (
+                <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#ADB5B7', borderTopColor: 'transparent' }} />
+              ) : status === 'connected' ? (
+                <CheckCircle className="h-5 w-5" style={{ color: '#2DA194' }} />
+              ) : (
+                <CloudOff className="h-5 w-5" style={{ color: '#ADB5B7' }} />
+              )}
+              <div>
+                <p className="text-sm font-semibold" style={{ color: '#1A2332' }}>
+                  {status === 'loading' ? 'Verificando...' : status === 'connected' ? 'Conectado' : 'No conectado'}
+                </p>
+                {status === 'connected' && accountName && (
+                  <p className="text-xs mt-0.5" style={{ color: '#5D7380' }}>{accountName} — {accountEmail}</p>
+                )}
+              </div>
+            </div>
+            {status === 'connected' && (
+              <button onClick={disconnect} className="h-8 px-3 rounded-lg text-xs font-semibold border transition-colors"
+                style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>
+                Desconectar
+              </button>
+            )}
+          </div>
+
+          {/* Token input */}
+          {status === 'disconnected' && (
+            <>
+              <div className="space-y-2">
+                <label className="text-sm font-medium" style={{ color: '#35414A' }}>Token de acceso de Dropbox</label>
+                <div className="flex gap-2">
+                  <input
+                    value={token}
+                    onChange={e => setToken(e.target.value)}
+                    placeholder="sl.xxxxxxxxxxxxx..."
+                    className="flex-1 h-10 px-4 rounded-lg border text-sm focus:outline-none"
+                    style={{ borderColor: '#E2E6EB', color: '#1A2332' }}
+                    type="password"
+                  />
+                  <button onClick={connect} disabled={connecting || !token.trim()}
+                    className="h-10 px-5 rounded-lg text-sm font-bold text-white disabled:opacity-40 transition-colors"
+                    style={{ background: '#0061FF' }}>
+                    {connecting ? '...' : 'Conectar'}
+                  </button>
+                </div>
+              </div>
+
+              {/* How to get the token */}
+              <div className="p-4 rounded-xl border" style={{ borderColor: '#E2E6EB', background: '#F7F8FA' }}>
+                <p className="text-sm font-semibold mb-2" style={{ color: '#1A2332' }}>¿Cómo obtener el token?</p>
+                <ol className="text-xs space-y-1.5" style={{ color: '#5D7380' }}>
+                  <li>1. Ve a <strong>dropbox.com/developers/apps</strong></li>
+                  <li>2. Crea una app → <strong>Scoped access</strong> → <strong>Full Dropbox</strong></li>
+                  <li>3. En <strong>Permissions</strong>, activa: <code>files.content.write</code> y <code>files.content.read</code></li>
+                  <li>4. Ve a la pestaña <strong>Generated access token</strong></li>
+                  <li>5. Copia el token y pégalo aquí</li>
+                </ol>
+              </div>
+            </>
+          )}
+
+          {/* How it works when connected */}
+          {status === 'connected' && (
+            <div className="p-4 rounded-xl border" style={{ borderColor: '#99F6E4', background: '#F0FDFA' }}>
+              <p className="text-sm font-semibold mb-1" style={{ color: '#115E59' }}>Sincronización automática</p>
+              <p className="text-xs" style={{ color: '#2DA194' }}>
+                Cada foto que subas se copiará automáticamente a tu Dropbox en la carpeta <strong>/Castalia Proyect/</strong> con la misma organización de proyectos y categorías.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </motion.div>
