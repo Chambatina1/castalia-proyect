@@ -3,10 +3,10 @@ services:
     name: castalia-proyect
     runtime: node
     plan: free
-    buildCommand: npx prisma generate && npx next build
+    buildCommand: npx prisma generate && npx prisma db push --skip-generate && npx next build
     startCommand: npx next start -p $PORT
     envVars:
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
-        value: file:./db/custom.db
+        value: file:/data/custom.db
