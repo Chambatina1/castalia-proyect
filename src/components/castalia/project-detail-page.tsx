@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, MapPin, Calendar, Image, CheckSquare, MessageSquare, FileText, Clock, Camera, X, ChevronLeft, ChevronRight, Pencil, Trash2, Eraser, Download, Share2, Copy, CheckCircle, ImagePlus, Link2 } from 'lucide-react'
+import { ArrowLeft, MapPin, Calendar, Image, CheckSquare, MessageSquare, FileText, Clock, Camera, X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Pencil, Trash2, Eraser, Download, Share2, Copy, CheckCircle, ImagePlus, Link2, GripVertical, Save, StickyNote } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -61,6 +61,19 @@ export default function ProjectDetailPage() {
   // Share link
   const [shareLink, setShareLink] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+
+  // Notes
+  const [showNoteEditor, setShowNoteEditor] = useState(false)
+  const [projectNote, setProjectNote] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
+
+  // Photo note
+  const [notePhotoId, setNotePhotoId] = useState<string | null>(null)
+  const [notePhotoText, setNotePhotoText] = useState('')
+
+  // Reorder photos
+  const [reorderMode, setReorderMode] = useState(false)
+  const [localPhotos, setLocalPhotos] = useState<ApiPhoto[]>([])
 
   const getTags = (p: ApiPhoto) => { try { return JSON.parse(p.tags || '[]') } catch { return (p.tags || '').split(',').filter(Boolean) } }
   const getPhase = (p: ApiPhoto) => { const t = getTags(p); return t.includes('antes') ? 'antes' : t.includes('despues') ? 'despues' : null }
@@ -209,6 +222,54 @@ export default function ProjectDetailPage() {
     }
   }
 
+  // ─── Project Note ───
+  const openNoteEditor = () => { setProjectNote(project?.description || ''); setShowNoteEditor(true) }
+  const saveProjectNote = async () => {
+    if (!selectedProjectId) return
+    setSavingNote(true)
+    try {
+      await fetch(`/api/projects/${selectedProjectId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ description: projectNote }) })
+      setProject(prev => ({ ...prev, description: projectNote }))
+      setShowNoteEditor(false)
+      toast({ title: 'Nota guardada' })
+    } catch { toast({ title: 'Error', variant: 'destructive' }) }
+    finally { setSavingNote(false) }
+  }
+
+  // ─── Photo Note ───
+  const openPhotoNote = (photo: ApiPhoto) => { setNotePhotoId(photo.id); setNotePhotoText(photo.caption || '') }
+  const savePhotoNote = async () => {
+    if (!notePhotoId) return
+    try {
+      await fetch(`/api/photos/${notePhotoId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: notePhotoText }) })
+      setPhotos(prev => prev.map(p => p.id === notePhotoId ? { ...p, caption: notePhotoText } : p))
+      setNotePhotoId(null)
+      toast({ title: 'Nota de foto guardada' })
+    } catch { toast({ title: 'Error', variant: 'destructive' }) }
+  }
+
+  // ─── Reorder Photos ───
+  const startReorder = () => { setReorderMode(true); setLocalPhotos([...filteredPhotos]) }
+  const savePhotoOrder = async () => {
+    try {
+      const items = localPhotos.map((p, i) => ({ id: p.id, sortOrder: i }))
+      await fetch('/api/photos/reorder', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) })
+      setPhotos(prev => {
+        const map = new Map(prev.map(p => [p.id, p]))
+        return localPhotos.map(lp => ({ ...map.get(lp.id)! }))
+      })
+      setReorderMode(false)
+      toast({ title: 'Orden guardado' })
+    } catch { toast({ title: 'Error', variant: 'destructive' }) }
+  }
+  const movePhoto = (idx: number, dir: -1 | 1) => {
+    const arr = [...localPhotos]
+    const newIdx = idx + dir
+    if (newIdx < 0 || newIdx >= arr.length) return
+    ;[arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]]
+    setLocalPhotos(arr)
+  }
+
   // ─── Draw handlers ───
   const initDrawCanvas = useCallback(() => {
     const canvas = drawCanvasRef.current
@@ -293,6 +354,11 @@ export default function ProjectDetailPage() {
             style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>
             <Share2 className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Compartir</span>
+          </button>
+          <button onClick={openNoteEditor} className="h-9 px-3 rounded-lg border flex items-center gap-1.5 text-[12px] font-semibold shrink-0"
+            style={{ borderColor: '#E2E6EB', color: '#F0A030' }}>
+            <StickyNote className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Nota</span>
           </button>
         </div>
       </div>
@@ -402,16 +468,22 @@ export default function ProjectDetailPage() {
               </TabsTrigger>
             ))}
             {/* Select mode toggle */}
-            <button onClick={() => { setSelectMode(!selectMode); setSelectedIds(new Set()) }}
+            <button onClick={reorderMode ? savePhotoOrder : () => { setSelectMode(!selectMode); setSelectedIds(new Set()) }}
               className="ml-auto px-3 py-2 rounded-lg text-[12px] font-semibold transition-all"
-              style={{ color: selectMode ? '#38C5B5' : '#ADB5B7', background: selectMode ? '#F0FDFA' : 'transparent' }}>
-              Seleccionar
+              style={{ color: (selectMode || reorderMode) ? '#38C5B5' : '#ADB5B7', background: (selectMode || reorderMode) ? '#F0FDFA' : 'transparent' }}>
+              {reorderMode ? 'Guardar orden' : selectMode ? 'Seleccionar' : 'Ordenar'}
             </button>
           </TabsList>
 
           {/* Gallery Tab */}
           <TabsContent value="gallery">
-            {/* Filters */}
+            {/* Filters + Reorder banner */}
+            {reorderMode && (
+              <div className="flex items-center justify-between p-3 rounded-xl mb-4" style={{ background: '#F0FDFA', border: '1px solid #99F6E4' }}>
+                <span className="text-[12px] font-semibold" style={{ color: '#115E59' }}>Modo reordenar — usa las flechas en cada foto</span>
+                <button onClick={() => setReorderMode(false)} className="text-[12px] font-semibold" style={{ color: '#5D7380' }}>Cancelar</button>
+              </div>
+            )}
             <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
               {[{ id: 'ALL', label: 'Todas', color: '#38C5B5' }, { id: 'antes', label: 'ANTES', color: '#F0A030' }, { id: 'despues', label: 'DESPUÉS', color: '#2DA194' }].map(f => (
                 <button key={f.id} onClick={() => setTagFilter(f.id)} className="px-3.5 py-2 rounded-lg text-[12px] font-bold tracking-wide whitespace-nowrap border transition-all"
@@ -419,38 +491,52 @@ export default function ProjectDetailPage() {
                   {f.label}
                 </button>
               ))}
-              {allLocales.map(loc => (
-                <button key={loc} onClick={() => setTagFilter(loc)} className="px-3.5 py-2 rounded-lg text-[12px] font-semibold whitespace-nowrap border transition-all"
-                  style={{ background: tagFilter === loc ? '#35414A' : 'white', color: tagFilter === loc ? 'white' : '#5D7380', borderColor: tagFilter === loc ? '#35414A' : '#E2E6EB' }}>
-                  {loc}
-                </button>
-              ))}
             </div>
 
             {/* Photo grid */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {filteredPhotos.map((photo, i) => {
+              {(reorderMode ? localPhotos : filteredPhotos).map((photo, i) => {
                 const phase = getPhase(photo)
                 const local = getLocal(photo)
                 const isSelected = selectedIds.has(photo.id)
+                const photoDate = new Date(photo.createdAt).toLocaleString('es-MX', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
                 return (
-                  <motion.div key={photo.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
+                  <motion.div key={photo.id} layout={reorderMode} initial={reorderMode ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: reorderMode ? 0 : i * 0.03 }}
                     className="relative group rounded-xl overflow-hidden border aspect-[4/3]"
-                    style={{ borderColor: isSelected ? '#38C5B5' : '#E8EBF0' }}>
+                    style={{ borderColor: reorderMode ? '#38C5B5' : isSelected ? '#38C5B5' : '#E8EBF0' }}>
+                    {/* Reorder arrows */}
+                    {reorderMode && (
+                      <div className="absolute top-1/2 -translate-y-1/2 -right-2 z-10 flex flex-col gap-0.5">
+                        <button onClick={(e) => { e.stopPropagation(); movePhoto(i, -1) }} disabled={i === 0}
+                          className="h-6 w-6 rounded-full bg-white border shadow-sm flex items-center justify-center disabled:opacity-30"
+                          style={{ borderColor: '#E2E6EB' }}><ChevronUp className="w-3.5 h-3.5" style={{ color: '#35414A' }} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); movePhoto(i, 1) }} disabled={i === localPhotos.length - 1}
+                          className="h-6 w-6 rounded-full bg-white border shadow-sm flex items-center justify-center disabled:opacity-30"
+                          style={{ borderColor: '#E2E6EB' }}><ChevronDown className="w-3.5 h-3.5" style={{ color: '#35414A' }} /></button>
+                      </div>
+                    )}
                     <img src={photo.thumbnailUrl || photo.url} alt={photo.caption || ''} className="w-full h-full object-cover cursor-pointer" loading="lazy"
-                      onClick={() => selectMode ? toggleSelect(photo.id) : setLightboxIdx(i)} />
-                    {/* Phase badge */}
+                      onClick={() => reorderMode ? null : selectMode ? toggleSelect(photo.id) : setLightboxIdx(i)} />
+                    {/* Phase badge + date */}
                     <div className="absolute top-2 left-2 flex flex-col gap-1 pointer-events-none">
                       {phase && <span className="px-2 py-0.5 rounded-md text-[10px] font-bold text-white" style={{ background: phase === 'antes' ? '#F0A030' : '#2DA194' }}>{phase === 'antes' ? 'ANTES' : 'DESPUÉS'}</span>}
-                      {local && <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold text-white" style={{ background: 'rgba(26,35,50,0.7)' }}>{local}</span>}
+                      <span className="px-1.5 py-0.5 rounded-md text-[9px] font-medium text-white" style={{ background: 'rgba(0,0,0,0.55)' }}>{photoDate}</span>
                     </div>
-                    {/* Download button (bottom right) */}
-                    <button onClick={(e) => { e.stopPropagation(); downloadPhoto(photo) }}
-                      className="absolute bottom-2 right-2 h-7 w-7 rounded-lg flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
-                      <Download className="w-3.5 h-3.5 text-white" />
-                    </button>
+                    {/* Action buttons (bottom right) */}
+                    {!reorderMode && (
+                      <div className="absolute bottom-2 right-2 flex gap-1">
+                        <button onClick={(e) => { e.stopPropagation(); downloadPhoto(photo) }}
+                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                          <Download className="w-3.5 h-3.5 text-white" />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); openPhotoNote(photo) }}
+                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                          <StickyNote className="w-3.5 h-3.5 text-white" />
+                        </button>
+                      </div>
+                    )}
                     {/* Select checkbox */}
-                    {selectMode && (
+                    {selectMode && !reorderMode && (
                       <div className="absolute top-2 right-2" onClick={(e) => { e.stopPropagation(); toggleSelect(photo.id) }}>
                         <div className="h-6 w-6 rounded-md border-2 flex items-center justify-center transition-all"
                           style={{ borderColor: isSelected ? '#38C5B5' : 'rgba(255,255,255,0.6)', background: isSelected ? '#38C5B5' : 'rgba(0,0,0,0.3)' }}>
@@ -458,7 +544,7 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
                     )}
-                    {photo.caption && <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/60 to-transparent pointer-events-none"><p className="text-[11px] text-white font-medium truncate">{photo.caption}</p></div>}
+                    {photo.caption && !reorderMode && <div className="absolute bottom-0 left-0 right-8 p-2 bg-gradient-to-t from-black/60 to-transparent pointer-events-none"><p className="text-[10px] text-white font-medium truncate">{photo.caption}</p></div>}
                   </motion.div>
                 )
               })}
@@ -515,6 +601,77 @@ export default function ProjectDetailPage() {
       </div>
 
       <div className="h-20 lg:h-0" />
+
+      {/* ═══ Project Note Modal ═══ */}
+      {showNoteEditor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowNoteEditor(false)} />
+          <div className="relative w-[360px] bg-white rounded-2xl overflow-hidden shadow-xl">
+            <div className="p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#FFF7ED' }}>
+                  <StickyNote className="w-5 h-5" style={{ color: '#F0A030' }} />
+                </div>
+                <h3 className="text-[17px] font-bold" style={{ color: '#1A2332' }}>Notas del proyecto</h3>
+              </div>
+              <textarea
+                value={projectNote}
+                onChange={e => setProjectNote(e.target.value)}
+                autoFocus
+                rows={6}
+                className="w-full text-[14px] rounded-xl border px-4 py-3 resize-none focus:outline-none focus:border-[#F0A030]/40"
+                style={{ borderColor: '#E2E6EB', color: '#1A2332' }}
+                placeholder="Escribe indicaciones, observaciones, detalles del proyecto..."
+              />
+            </div>
+            <div className="flex border-t" style={{ borderColor: '#E8EBF0' }}>
+              <button onClick={() => setShowNoteEditor(false)} disabled={savingNote}
+                className="flex-1 h-12 text-[14px] font-semibold border-r" style={{ color: '#5D7380', borderColor: '#E8EBF0' }}>Cancelar</button>
+              <button onClick={saveProjectNote} disabled={savingNote}
+                className="flex-1 h-12 text-[14px] font-semibold text-white flex items-center justify-center gap-2 disabled:opacity-50"
+                style={{ background: '#F0A030' }}>
+                {savingNote ? <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Photo Note Modal ═══ */}
+      {notePhotoId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setNotePhotoId(null)} />
+          <div className="relative w-[340px] bg-white rounded-2xl overflow-hidden shadow-xl">
+            <div className="p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#F0FDFA' }}>
+                  <StickyNote className="w-5 h-5" style={{ color: '#38C5B5' }} />
+                </div>
+                <h3 className="text-[17px] font-bold" style={{ color: '#1A2332' }}>Nota de foto</h3>
+              </div>
+              <textarea
+                value={notePhotoText}
+                onChange={e => setNotePhotoText(e.target.value)}
+                autoFocus
+                rows={3}
+                className="w-full text-[14px] rounded-xl border px-4 py-3 resize-none focus:outline-none focus:border-[#38C5B5]/40"
+                style={{ borderColor: '#E2E6EB', color: '#1A2332' }}
+                placeholder="Indicaciones de esta foto..."
+              />
+            </div>
+            <div className="flex border-t" style={{ borderColor: '#E8EBF0' }}>
+              <button onClick={() => setNotePhotoId(null)}
+                className="flex-1 h-12 text-[14px] font-semibold border-r" style={{ color: '#5D7380', borderColor: '#E8EBF0' }}>Cancelar</button>
+              <button onClick={savePhotoNote}
+                className="flex-1 h-12 text-[14px] font-semibold text-white flex items-center justify-center gap-2"
+                style={{ background: '#38C5B5' }}>
+                <Save className="w-4 h-4" /> Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ═══ FULLSCREEN LIGHTBOX ═══ */}
       <AnimatePresence>

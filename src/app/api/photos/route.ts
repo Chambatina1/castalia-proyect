@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
         uploader: { select: { id: true, name: true, avatar: true } },
         project: { select: { id: true, name: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     });
 
     return NextResponse.json({ photos });

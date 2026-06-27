@@ -105,6 +105,10 @@ export async function PUT(
       data.longitude = body.longitude;
     }
 
+    if (body.sortOrder !== undefined) {
+      data.sortOrder = body.sortOrder;
+    }
+
     const photo = await db.photo.update({
       where: { id },
       data,
