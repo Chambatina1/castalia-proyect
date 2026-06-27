@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Settings as SettingsIcon, User, Shield, Bell, Palette, Database, ChevronRight, Building2, Moon, Sun, Globe, Lock, Cloud, CloudOff, RefreshCw, CheckCircle } from 'lucide-react'
+import { Settings as SettingsIcon, User, Shield, Bell, Palette, Database, ChevronRight, Building2, Moon, Sun, Globe, Lock, Cloud, CloudOff, RefreshCw, CheckCircle, HardDriveDownload, HardDriveUpload, Clock, AlertTriangle, ShieldCheck } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -296,6 +296,11 @@ function DropboxSection() {
   const [accountName, setAccountName] = useState('')
   const [accountEmail, setAccountEmail] = useState('')
   const [connecting, setConnecting] = useState(false)
+  const [lastBackupAt, setLastBackupAt] = useState<string | null>(null)
+
+  // Backup/restore state
+  const [backingUp, setBackingUp] = useState(false)
+  const [restoring, setRestoring] = useState(false)
 
   useEffect(() => {
     checkStatus()
@@ -309,6 +314,7 @@ function DropboxSection() {
         setStatus('connected')
         setAccountName(data.accountName || '')
         setAccountEmail(data.accountEmail || '')
+        setLastBackupAt(data.lastBackupAt || null)
       } else {
         setStatus('disconnected')
       }
@@ -353,14 +359,69 @@ function DropboxSection() {
       setStatus('disconnected')
       setAccountName('')
       setAccountEmail('')
+      setLastBackupAt(null)
       toast({ title: 'Dropbox desconectado' })
     } catch {
       toast({ title: 'Error', variant: 'destructive' })
     }
   }
 
+  const doBackup = async () => {
+    setBackingUp(true)
+    try {
+      const res = await fetch('/api/dropbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'backup-db' }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setLastBackupAt(new Date().toISOString())
+        toast({ title: 'Backup creado', description: data.message })
+      } else {
+        toast({ title: 'Error al crear backup', description: data.message, variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error de conexión', variant: 'destructive' })
+    } finally {
+      setBackingUp(false)
+    }
+  }
+
+  const doRestore = async () => {
+    if (!confirm('Esto restaurará todos los datos (proyectos, fotos, categorías) desde el último backup en Dropbox. Los datos actuales se mezclarán. ¿Continuar?')) return
+    setRestoring(true)
+    try {
+      const res = await fetch('/api/dropbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'restore-db' }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast({
+          title: 'Datos restaurados',
+          description: `${data.message} — ${data.stats?.projects || 0} proyectos, ${data.stats?.categorias || 0} categorías, ${data.stats?.photos || 0} fotos`,
+        })
+      } else {
+        toast({ title: 'Error al restaurar', description: data.message, variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error de conexión', variant: 'destructive' })
+    } finally {
+      setRestoring(false)
+    }
+  }
+
+  const formatTime = (iso: string | null) => {
+    if (!iso) return 'Nunca'
+    const d = new Date(iso)
+    return d.toLocaleDateString('es-LA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  }
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+      {/* Connection card */}
       <Card className="rounded-xl">
         <CardHeader className="pb-4">
           <CardTitle className="text-lg font-semibold flex items-center gap-2">
@@ -422,7 +483,6 @@ function DropboxSection() {
                 </div>
               </div>
 
-              {/* How to get the token */}
               <div className="p-4 rounded-xl border" style={{ borderColor: '#E2E6EB', background: '#F7F8FA' }}>
                 <p className="text-sm font-semibold mb-2" style={{ color: '#1A2332' }}>¿Cómo obtener el token?</p>
                 <ol className="text-xs space-y-1.5" style={{ color: '#5D7380' }}>
@@ -436,17 +496,110 @@ function DropboxSection() {
             </>
           )}
 
-          {/* How it works when connected */}
+          {/* Info when connected */}
           {status === 'connected' && (
             <div className="p-4 rounded-xl border" style={{ borderColor: '#99F6E4', background: '#F0FDFA' }}>
-              <p className="text-sm font-semibold mb-1" style={{ color: '#115E59' }}>Sincronización automática</p>
-              <p className="text-xs" style={{ color: '#2DA194' }}>
-                Cada foto que subas se copiará automáticamente a tu Dropbox en la carpeta <strong>/Castalia Proyect/</strong> con la misma organización de proyectos y categorías.
-              </p>
+              <div className="flex items-start gap-2">
+                <ShieldCheck className="h-4 w-4 mt-0.5 shrink-0" style={{ color: '#2DA194' }} />
+                <div>
+                  <p className="text-sm font-semibold mb-1" style={{ color: '#115E59' }}>Dropbox como base de datos</p>
+                  <p className="text-xs leading-relaxed" style={{ color: '#2DA194' }}>
+                    Tus datos están protegidos. Cada foto se copia automáticamente a tu Dropbox en <strong>/Castalia Proyect/</strong>.
+                    Además, se guarda un backup completo de la base de datos (proyectos, categorías, notas) como JSON.
+                    Si pierdes datos, puedes restaurarlos desde Dropbox.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Backup & Restore card — only when connected */}
+      {status === 'connected' && (
+        <Card className="rounded-xl">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+              <Database className="h-5 w-5" style={{ color: '#38C5B5' }} />
+              Backup de Base de Datos
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Last backup info */}
+            <div className="flex items-center justify-between p-3 rounded-xl border" style={{ borderColor: '#E2E6EB', background: '#FAFAFA' }}>
+              <div className="flex items-center gap-3">
+                <Clock className="h-4 w-4" style={{ color: '#5D7380' }} />
+                <div>
+                  <p className="text-sm font-medium" style={{ color: '#1A2332' }}>Último backup</p>
+                  <p className="text-xs" style={{ color: '#5D7380' }}>{formatTime(lastBackupAt)}</p>
+                </div>
+              </div>
+              <Badge variant="outline" className="text-xs" style={{ borderColor: lastBackupAt ? '#38C5B5' : '#E2E6EB', color: lastBackupAt ? '#2DA194' : '#5D7380' }}>
+                {lastBackupAt ? 'Protegido' : 'Sin backup'}
+              </Badge>
+            </div>
+
+            {/* Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Backup button */}
+              <button
+                onClick={doBackup}
+                disabled={backingUp}
+                className="flex items-center justify-center gap-2 p-3 rounded-xl border-2 border-dashed transition-all"
+                style={{
+                  borderColor: '#38C5B5',
+                  background: backingUp ? '#F0FDFA' : 'transparent',
+                  opacity: backingUp ? 0.7 : 1,
+                }}>
+                {backingUp ? (
+                  <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#38C5B5', borderTopColor: 'transparent' }} />
+                ) : (
+                  <HardDriveUpload className="h-4 w-4" style={{ color: '#38C5B5' }} />
+                )}
+                <div className="text-left">
+                  <p className="text-sm font-semibold" style={{ color: '#2DA194' }}>
+                    {backingUp ? 'Creando backup...' : 'Crear Backup Ahora'}
+                  </p>
+                  <p className="text-xs" style={{ color: '#5D7380' }}>Guarda todo en Dropbox</p>
+                </div>
+              </button>
+
+              {/* Restore button */}
+              <button
+                onClick={doRestore}
+                disabled={restoring}
+                className="flex items-center justify-center gap-2 p-3 rounded-xl border-2 border-dashed transition-all"
+                style={{
+                  borderColor: '#F0A030',
+                  background: restoring ? '#FFF7ED' : 'transparent',
+                  opacity: restoring ? 0.7 : 1,
+                }}>
+                {restoring ? (
+                  <div className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#F0A030', borderTopColor: 'transparent' }} />
+                ) : (
+                  <HardDriveDownload className="h-4 w-4" style={{ color: '#F0A030' }} />
+                )}
+                <div className="text-left">
+                  <p className="text-sm font-semibold" style={{ color: '#C77E20' }}>
+                    {restoring ? 'Restaurando...' : 'Restaurar Datos'}
+                  </p>
+                  <p className="text-xs" style={{ color: '#5D7380' }}>Recuperar desde Dropbox</p>
+                </div>
+              </button>
+            </div>
+
+            {/* Warning */}
+            <div className="flex items-start gap-2 p-3 rounded-lg" style={{ background: '#FEF3C7' }}>
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" style={{ color: '#D97706' }} />
+              <p className="text-xs leading-relaxed" style={{ color: '#92400E' }}>
+                El backup incluye toda la estructura de datos (proyectos, categorías, notas, orden de fotos).
+                Las fotos físicas también se respaldan cuando sincronizas un proyecto.
+                Se guardan los últimos 10 backups automáticamente.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </motion.div>
   )
 }
@@ -460,9 +613,9 @@ function SystemSection() {
         </CardHeader>
         <CardContent className="space-y-3">
           {[
-            { label: 'Versión', value: '1.0.0' },
-            { label: 'Base de datos', value: 'SQLite' },
-            { label: 'Almacenamiento', value: 'Local' },
+            { label: 'Versión', value: '1.1.0' },
+            { label: 'Base de datos', value: 'SQLite + Dropbox Backup' },
+            { label: 'Almacenamiento', value: 'Dropbox' },
             { label: 'Empresa', value: 'Castalia Collections' },
           ].map((item) => (
             <div key={item.label} className="flex items-center justify-between py-2">

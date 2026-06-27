@@ -148,13 +148,16 @@ export async function POST(request: NextRequest) {
 
         savedPhotos.push(photo);
 
-        // Fire-and-forget: sync to Dropbox if connected
-        if (subProductId) {
-          const subProduct = await db.subProduct.findUnique({ where: { id: subProductId }, select: { name: true } });
-          fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/dropbox`, {
+        // Fire-and-forget: sync to Dropbox if connected (always, not just when subProductId)
+        {
+          const subProductName = subProductId
+            ? (await db.subProduct.findUnique({ where: { id: subProductId }, select: { name: true } }))?.name || 'General'
+            : 'General';
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+          fetch(`${appUrl}/api/dropbox`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'upload-photo', photoId: photo.id, projectId, fase, subProductName: subProduct?.name }),
+            body: JSON.stringify({ action: 'upload-photo', photoId: photo.id, projectId, fase, subProductName }),
           }).catch(() => {});
         }
       }
