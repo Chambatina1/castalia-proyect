@@ -230,7 +230,6 @@ const ROLE_PERMISSIONS: Record<UserRole, View[]> = {
     'projects',
     'project-detail',
     'photos',
-    'chat',
     'tasks',
     'reports',
     'clients',
@@ -241,7 +240,6 @@ const ROLE_PERMISSIONS: Record<UserRole, View[]> = {
     'projects',
     'project-detail',
     'photos',
-    'chat',
     'tasks',
     'reports',
     'clients',
@@ -252,10 +250,9 @@ const ROLE_PERMISSIONS: Record<UserRole, View[]> = {
     'projects',
     'project-detail',
     'photos',
-    'chat',
     'tasks',
   ],
-  CLIENT: ['client-portal', 'projects', 'project-detail', 'photos', 'chat'],
+  CLIENT: ['client-portal', 'projects', 'project-detail', 'photos'],
 };
 
 // ─── Store Interface ─────────────────────────────────────────────────────────

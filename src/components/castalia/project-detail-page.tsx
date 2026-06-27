@@ -71,9 +71,13 @@ export default function ProjectDetailPage() {
   const [projectNote, setProjectNote] = useState('')
   const [savingNote, setSavingNote] = useState(false)
 
-  // Photo note
+  // Photo note (modal)
   const [notePhotoId, setNotePhotoId] = useState<string | null>(null)
   const [notePhotoText, setNotePhotoText] = useState('')
+
+  // Inline note editing
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [editingNoteText, setEditingNoteText] = useState('')
 
   // Reorder photos
   const [reorderMode, setReorderMode] = useState(false)
@@ -151,7 +155,7 @@ export default function ProjectDetailPage() {
       await fetch('/api/subproducts', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, name: renameSubValue.trim() }) })
       setSubProducts(prev => prev.map(s => s.id === id ? { ...s, name: renameSubValue.trim() } : s))
       setRenamingSubId(null)
-      toast({ title: 'Subproducto renombrado' })
+      toast({ title: 'Categoría renombrada' })
     } catch { toast({ title: 'Error', variant: 'destructive' }) }
   }
   const deleteSubProduct = async (id: string) => {
@@ -159,7 +163,7 @@ export default function ProjectDetailPage() {
       await fetch(`/api/subproducts?id=${id}`, { method: 'DELETE' })
       setSubProducts(prev => prev.filter(s => s.id !== id))
       if (selectedSubId === id) setSelectedSubId(null)
-      toast({ title: 'Subproducto eliminado' })
+      toast({ title: 'Categoría eliminada' })
     } catch { toast({ title: 'Error', variant: 'destructive' }) }
   }
   const moveSubProduct = async (idx: number, dir: -1 | 1) => {
@@ -338,6 +342,18 @@ export default function ProjectDetailPage() {
       setNotePhotoId(null)
       toast({ title: 'Nota de foto guardada' })
     } catch { toast({ title: 'Error', variant: 'destructive' }) }
+  }
+
+  // ─── Inline Note Save ───
+  const saveInlineNote = async (photoId: string, text: string) => {
+    if (!photoId) return
+    const trimmed = text.trim()
+    try {
+      await fetch(`/api/photos/${photoId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: trimmed || null }) })
+      setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, caption: trimmed || '' } : p))
+      setEditingNoteId(null)
+      if (trimmed) toast({ title: 'Nota guardada' })
+    } catch { toast({ title: 'Error al guardar nota', variant: 'destructive' }) }
   }
 
   // ─── Reorder Photos ───
@@ -763,7 +779,7 @@ export default function ProjectDetailPage() {
                         <div className="absolute top-2 right-2 flex gap-1">
                           <button onClick={(e) => { e.stopPropagation(); setAssigningSubPhotoId(photo.id) }}
                             className="h-7 w-7 rounded-lg flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm"
-                            title="Asignar a subproducto">
+                            title="Mover a categoría">
                             <Folder className="w-3.5 h-3.5 text-white" />
                           </button>
                           <button onClick={(e) => { e.stopPropagation(); downloadPhoto(photo) }}
@@ -786,10 +802,18 @@ export default function ProjectDetailPage() {
                         </div>
                       )}
                     </div>
-                    {/* Date + caption BELOW the photo */}
+                    {/* Date + inline editable note BELOW the photo */}
                     <div className="px-2.5 py-2">
                       <p className="text-[11px] font-semibold" style={{ color: '#1A2332' }}>{photoDate}</p>
-                      {photo.caption && <p className="text-[10px] mt-0.5 truncate" style={{ color: '#5D7380' }}>{photo.caption}</p>}
+                      <input
+                        value={editingNoteId === photo.id ? editingNoteText : (photo.caption || '')}
+                        onChange={e => { setEditingNoteId(photo.id); setEditingNoteText(e.target.value) }}
+                        onBlur={() => { if (editingNoteId === photo.id) saveInlineNote(photo.id, editingNoteText) }}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); (document.activeElement as HTMLInputElement)?.blur() } }}
+                        placeholder="Agregar nota..."
+                        className="w-full text-[11px] rounded-md border border-transparent focus:border-[#38C5B5]/50 focus:outline-none px-2 py-1 mt-1 transition-colors"
+                        style={{ color: photo.caption ? '#35414A' : '#ADB5B7', background: '#F7F8FA' }}
+                      />
                     </div>
                   </motion.div>
                 )
@@ -931,7 +955,7 @@ export default function ProjectDetailPage() {
                 <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#F0FDFA' }}>
                   <Folder className="w-5 h-5" style={{ color: '#38C5B5' }} />
                 </div>
-                <h3 className="text-[17px] font-bold" style={{ color: '#1A2332' }}>Asignar a subproducto</h3>
+                <h3 className="text-[17px] font-bold" style={{ color: '#1A2332' }}>Mover a categoría</h3>
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-5 pb-2">
@@ -939,7 +963,7 @@ export default function ProjectDetailPage() {
                 className="w-full flex items-center gap-3 p-3 rounded-xl mb-1 border transition-colors text-left"
                 style={{ borderColor: '#E2E6EB', background: '#FAFAFA' }}>
                 <Image className="w-4 h-4 shrink-0" style={{ color: '#9CA3AF' }} />
-                <span className="text-[13px] font-medium" style={{ color: '#5D7380' }}>Sin subproducto</span>
+                <span className="text-[13px] font-medium" style={{ color: '#5D7380' }}>Sin categoría</span>
               </button>
               {subProducts.map(sub => (
                 <button key={sub.id} onClick={() => assignPhotoToSub(assigningSubPhotoId, sub.id)}
