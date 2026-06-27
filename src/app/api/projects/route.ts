@@ -1,5 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import bcrypt from 'bcryptjs'
+
+// Ensure at least one user exists — creates default admin if needed
+async function ensureUserExists(): Promise<string> {
+  const anyUser = await db.user.findFirst({ select: { id: true } })
+  if (anyUser) return anyUser.id
+
+  // No users at all — create default admin
+  const hash = await bcrypt.hash('admin123', 10)
+  const user = await db.user.create({
+    data: {
+      email: 'admin@castalia.com',
+      password: hash,
+      name: 'Admin Castalia',
+      role: 'SUPER_ADMIN',
+      position: 'Director General',
+    },
+  })
+  console.log('[ensureUserExists] Created default admin:', user.id)
+  return user.id
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -42,14 +63,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Se requiere nombre del proyecto' }, { status: 400 })
     }
 
-    // If no creatorId, use first available user
-    if (!creatorId) {
-      const anyUser = await db.user.findFirst({ select: { id: true } })
-      if (anyUser) creatorId = anyUser.id
+    // Resolve a valid creatorId
+    if (creatorId) {
+      // Verify the user actually exists
+      const user = await db.user.findUnique({ where: { id: creatorId }, select: { id: true } })
+      if (!user) creatorId = null // stale ID, will fall through to findFirst
     }
 
     if (!creatorId) {
-      return NextResponse.json({ error: 'No hay usuario disponible' }, { status: 400 })
+      // Try to find any existing user
+      const anyUser = await db.user.findFirst({ select: { id: true } })
+      if (anyUser) {
+        creatorId = anyUser.id
+      } else {
+        // No users at all — create default admin as absolute fallback
+        creatorId = await ensureUserExists()
+      }
+    }
+
+    if (!creatorId) {
+      return NextResponse.json({ error: 'No hay usuario disponible. Recarga la app.' }, { status: 400 })
     }
 
     const project = await db.project.create({

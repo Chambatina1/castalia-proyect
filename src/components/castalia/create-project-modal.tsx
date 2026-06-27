@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { X, Plus, Camera } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { X, Plus, Camera, AlertCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useAppStore } from '@/store/app-store';
 import { useToast } from '@/hooks/use-toast';
@@ -18,8 +17,9 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const reset = () => { setName(''); setCoverPreview(null); setCoverFile(null); setIsSubmitting(false); };
+  const reset = () => { setName(''); setCoverPreview(null); setCoverFile(null); setIsSubmitting(false); setErrorMsg(null); };
 
   const handleClose = () => { onClose(); setTimeout(reset, 300); };
 
@@ -34,10 +34,11 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
   const handleCreate = async () => {
     const projectName = name.trim();
     if (!projectName) {
-      toast({ title: 'Nombre requerido' });
+      setErrorMsg('Escribe un nombre para el proyecto');
       return;
     }
 
+    setErrorMsg(null);
     setIsSubmitting(true);
     try {
       // 1. Create project
@@ -46,8 +47,15 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: projectName, creatorId: currentUser?.id }),
       });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const msg = errData.error || 'Error del servidor';
+        setErrorMsg(msg);
+        throw new Error(msg);
+      }
+
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Error del servidor');
 
       // 2. Upload cover if selected
       if (coverFile && data.id) {
@@ -77,8 +85,11 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
       handleClose();
       onCreated?.();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'No se pudo crear';
-      toast({ title: 'Error', description: msg, variant: 'destructive' });
+      if (!errorMsg) {
+        const msg = err instanceof Error ? err.message : 'No se pudo crear el proyecto';
+        setErrorMsg(msg);
+      }
+      toast({ title: 'Error', description: errorMsg || 'No se pudo crear', variant: 'destructive' });
       console.error('Create project error:', err);
     } finally {
       setIsSubmitting(false);
@@ -112,6 +123,14 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
           </button>
         </div>
 
+        {/* Error Alert */}
+        {errorMsg && (
+          <div className="mx-5 mb-2 flex items-start gap-2.5 p-3 rounded-xl bg-red-50 border border-red-200">
+            <AlertCircle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+            <p className="text-[13px] text-red-700 leading-relaxed">{errorMsg}</p>
+          </div>
+        )}
+
         {/* Body */}
         <div className="px-5 pb-6 space-y-4">
           {/* Cover */}
@@ -137,7 +156,7 @@ export default function CreateProjectModal({ open, onClose, onCreated }: Props) 
             <Input
               placeholder="Ej: Residencia Playa del Carmen"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => { setName(e.target.value); setErrorMsg(null); }}
               className="h-11 text-sm rounded-xl"
               autoFocus
             />
