@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Building2, Camera, CheckSquare, FileText, Plus, Upload, AlertTriangle, Search, Bell, LogOut, MapPin, Image, Clock, ArrowUpRight, X, LayoutDashboard, MessageSquare, FileBarChart, Users, Settings, ChevronRight, Menu, TrendingUp, FolderKanban, Trash2, Pencil, Check, GripVertical,
+  Building2, Camera, CheckSquare, FileText, Plus, Upload, AlertTriangle, Search, Bell, LogOut, MapPin, Image, Clock, ArrowUpRight, X, LayoutDashboard, MessageSquare, FileBarChart, Users, Settings, ChevronRight, Menu, TrendingUp, FolderKanban, Trash2, Pencil, Check, GripVertical, ArrowUp, ArrowDown, Save,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -66,6 +66,37 @@ export default function DashboardPage() {
   const [savingNote, setSavingNote] = useState(false)
   const [reorderMode, setReorderMode] = useState(false)
   const [reorderProjects, setReorderProjects] = useState<ApiProject[]>([])
+  const [statReorderMode, setStatReorderMode] = useState(false)
+  const [statReorderProjects, setStatReorderProjects] = useState<ApiProject[]>([])
+
+  const startStatReorder = () => {
+    const active = projects.filter(p => p.status === 'ACTIVE')
+    setStatReorderProjects([...active])
+    setStatReorderMode(true)
+  }
+  const saveStatReorder = async () => {
+    try {
+      // Build items with sortOrder preserving positions of ALL projects (not just active ones)
+      const activeIds = new Set(statReorderProjects.map(p => p.id))
+      const nonActive = projects.filter(p => !activeIds.has(p.id))
+      const allOrdered = [...statReorderProjects, ...nonActive]
+      const items = allOrdered.map((p, i) => ({ id: p.id, sortOrder: i }))
+      await fetch('/api/projects/reorder', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) })
+      setProjects(prev => {
+        const map = new Map(prev.map(p => [p.id, p]))
+        return allOrdered.map(p => ({ ...map.get(p.id)!, sortOrder: allOrdered.indexOf(p) }))
+      })
+      setStatReorderMode(false)
+      toast({ title: 'Orden de proyectos actualizado' })
+    } catch { toast({ title: 'Error al guardar orden', variant: 'destructive' }) }
+  }
+  const moveStatProject = (idx: number, dir: -1 | 1) => {
+    const newIdx = idx + dir
+    if (newIdx < 0 || newIdx >= statReorderProjects.length) return
+    const arr = [...statReorderProjects]
+    ;[arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]]
+    setStatReorderProjects(arr)
+  }
 
   const loadData = useCallback(async () => {
     try {
@@ -325,17 +356,52 @@ export default function DashboardPage() {
                       <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'visible' }}>
                         <div className="pt-3 mt-3 border-t" style={{ borderColor: '#EDF0F4' }}>
                           {stat.key === 'active' && (
-                            <div className="max-h-[300px] overflow-y-auto space-y-1 -mx-1 px-1" style={{ WebkitOverflowScrolling: 'touch' }}>
-                              {projects.filter(p => p.status === 'ACTIVE').map(p => (
-                                <div key={p.id} onClick={(e) => { e.stopPropagation(); navigateTo('project-detail', p.id); selectProject(p as any); }} className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-black/5 active:bg-black/10 cursor-pointer">
-                                  <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-gray-100"><img src={p.coverImage || ''} alt="" className="w-full h-full object-cover" /></div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-[12px] font-semibold truncate" style={{ color: '#35414A' }}>{p.name}</p>
-                                    <p className="text-[10px]" style={{ color: '#ADB5B7' }}>{p._count.photos} fotos</p>
+                            <div className="max-h-[400px] overflow-y-auto -mx-1 px-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+                              {statReorderMode ? (
+                                <>
+                                  <div className="flex items-center justify-between mb-2 px-1">
+                                    <span className="text-[11px] font-semibold" style={{ color: '#115E59' }}>Modo reordenar</span>
+                                    <div className="flex gap-1">
+                                      <button onClick={(e) => { e.stopPropagation(); saveStatReorder() }} className="flex items-center gap-1 h-6 px-2 rounded-md text-[10px] font-semibold text-white" style={{ background: '#38C5B5' }}><Save className="w-3 h-3" />Guardar</button>
+                                      <button onClick={(e) => { e.stopPropagation(); setStatReorderMode(false) }} className="h-6 px-2 rounded-md text-[10px] font-semibold border" style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>Cancelar</button>
+                                    </div>
                                   </div>
-                                  <ChevronRight className="w-3.5 h-3.5 shrink-0" style={{ color: '#ADB5B7' }} />
-                                </div>
-                              ))}
+                                  <div className="space-y-0.5">
+                                    {statReorderProjects.map((p, idx) => (
+                                      <div key={p.id} className="flex items-center gap-1 p-1.5 rounded-lg" style={{ background: idx === 0 ? 'rgba(56,197,181,0.06)' : 'transparent' }}>
+                                        <div className="flex flex-col gap-0.5 shrink-0">
+                                          <button onClick={(e) => { e.stopPropagation(); moveStatProject(idx, -1) }} disabled={idx === 0} className="w-5 h-5 flex items-center justify-center rounded hover:bg-black/10 disabled:opacity-20"><ArrowUp className="w-3 h-3" style={{ color: '#35414A' }} /></button>
+                                          <button onClick={(e) => { e.stopPropagation(); moveStatProject(idx, 1) }} disabled={idx === statReorderProjects.length - 1} className="w-5 h-5 flex items-center justify-center rounded hover:bg-black/10 disabled:opacity-20"><ArrowDown className="w-3 h-3" style={{ color: '#35414A' }} /></button>
+                                        </div>
+                                        <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 bg-gray-100"><img src={p.coverImage || ''} alt="" className="w-full h-full object-cover" /></div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-[11px] font-semibold truncate" style={{ color: '#35414A' }}>{p.name}</p>
+                                          <p className="text-[9px]" style={{ color: '#ADB5B7' }}>{p._count.photos} fotos</p>
+                                        </div>
+                                        <span className="text-[9px] font-mono shrink-0" style={{ color: '#ADB5B7' }}>#{idx + 1}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="flex justify-end mb-1.5 px-1">
+                                    <button onClick={(e) => { e.stopPropagation(); startStatReorder() }} className="flex items-center gap-1 h-6 px-2 rounded-md text-[10px] font-medium border" style={{ borderColor: '#E2E6EB', color: '#5D7380' }}><GripVertical className="w-3 h-3" />Reordenar</button>
+                                  </div>
+                                  <div className="space-y-1">
+                                    {projects.filter(p => p.status === 'ACTIVE').map(p => (
+                                      <div key={p.id} onClick={(e) => { e.stopPropagation(); navigateTo('project-detail', p.id); selectProject(p as any); }} className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-black/5 active:bg-black/10 cursor-pointer">
+                                        <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-gray-100"><img src={p.coverImage || ''} alt="" className="w-full h-full object-cover" /></div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-[12px] font-semibold truncate" style={{ color: '#35414A' }}>{p.name}</p>
+                                          <p className="text-[10px]" style={{ color: '#ADB5B7' }}>{p._count.photos} fotos</p>
+                                        </div>
+                                        <ChevronRight className="w-3.5 h-3.5 shrink-0" style={{ color: '#ADB5B7' }} />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
                             </div>
                           )}
                           {stat.key === 'photos' && (
