@@ -497,12 +497,11 @@ export default function ProjectDetailPage() {
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {(reorderMode ? localPhotos : filteredPhotos).map((photo, i) => {
                 const phase = getPhase(photo)
-                const local = getLocal(photo)
                 const isSelected = selectedIds.has(photo.id)
                 const photoDate = new Date(photo.createdAt).toLocaleString('es-MX', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
                 return (
                   <motion.div key={photo.id} layout={reorderMode} initial={reorderMode ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: reorderMode ? 0 : i * 0.03 }}
-                    className="relative group rounded-xl overflow-hidden border aspect-[4/3]"
+                    className="relative group rounded-xl overflow-hidden border bg-white"
                     style={{ borderColor: reorderMode ? '#38C5B5' : isSelected ? '#38C5B5' : '#E8EBF0' }}>
                     {/* Reorder arrows */}
                     {reorderMode && (
@@ -515,36 +514,43 @@ export default function ProjectDetailPage() {
                           style={{ borderColor: '#E2E6EB' }}><ChevronDown className="w-3.5 h-3.5" style={{ color: '#35414A' }} /></button>
                       </div>
                     )}
-                    <img src={photo.thumbnailUrl || photo.url} alt={photo.caption || ''} className="w-full h-full object-cover cursor-pointer" loading="lazy"
-                      onClick={() => reorderMode ? null : selectMode ? toggleSelect(photo.id) : setLightboxIdx(i)} />
-                    {/* Phase badge + date */}
-                    <div className="absolute top-2 left-2 flex flex-col gap-1 pointer-events-none">
-                      {phase && <span className="px-2 py-0.5 rounded-md text-[10px] font-bold text-white" style={{ background: phase === 'antes' ? '#F0A030' : '#2DA194' }}>{phase === 'antes' ? 'ANTES' : 'DESPUÉS'}</span>}
-                      <span className="px-1.5 py-0.5 rounded-md text-[9px] font-medium text-white" style={{ background: 'rgba(0,0,0,0.55)' }}>{photoDate}</span>
-                    </div>
-                    {/* Action buttons (bottom right) */}
-                    {!reorderMode && (
-                      <div className="absolute bottom-2 right-2 flex gap-1">
-                        <button onClick={(e) => { e.stopPropagation(); downloadPhoto(photo) }}
-                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
-                          <Download className="w-3.5 h-3.5 text-white" />
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); openPhotoNote(photo) }}
-                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
-                          <StickyNote className="w-3.5 h-3.5 text-white" />
-                        </button>
-                      </div>
-                    )}
-                    {/* Select checkbox */}
-                    {selectMode && !reorderMode && (
-                      <div className="absolute top-2 right-2" onClick={(e) => { e.stopPropagation(); toggleSelect(photo.id) }}>
-                        <div className="h-6 w-6 rounded-md border-2 flex items-center justify-center transition-all"
-                          style={{ borderColor: isSelected ? '#38C5B5' : 'rgba(255,255,255,0.6)', background: isSelected ? '#38C5B5' : 'rgba(0,0,0,0.3)' }}>
-                          {isSelected && <CheckCircle className="w-4 h-4 text-white" />}
+                    {/* Image */}
+                    <div className="relative aspect-[4/3] overflow-hidden">
+                      <img src={photo.thumbnailUrl || photo.url} alt={photo.caption || ''} className="w-full h-full object-cover cursor-pointer" loading="lazy"
+                        onClick={() => reorderMode ? null : selectMode ? toggleSelect(photo.id) : setLightboxIdx(i)} />
+                      {/* Phase badge */}
+                      {phase && (
+                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold text-white pointer-events-none"
+                          style={{ background: phase === 'antes' ? '#F0A030' : '#2DA194' }}>{phase === 'antes' ? 'ANTES' : 'DESPUÉS'}</span>
+                      )}
+                      {/* Action buttons */}
+                      {!reorderMode && (
+                        <div className="absolute top-2 right-2 flex gap-1">
+                          <button onClick={(e) => { e.stopPropagation(); downloadPhoto(photo) }}
+                            className="h-7 w-7 rounded-lg flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                            <Download className="w-3.5 h-3.5 text-white" />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); openPhotoNote(photo) }}
+                            className="h-7 w-7 rounded-lg flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                            <StickyNote className="w-3.5 h-3.5 text-white" />
+                          </button>
                         </div>
-                      </div>
-                    )}
-                    {photo.caption && !reorderMode && <div className="absolute bottom-0 left-0 right-8 p-2 bg-gradient-to-t from-black/60 to-transparent pointer-events-none"><p className="text-[10px] text-white font-medium truncate">{photo.caption}</p></div>}
+                      )}
+                      {/* Select checkbox */}
+                      {selectMode && !reorderMode && (
+                        <div className="absolute top-2 right-2" onClick={(e) => { e.stopPropagation(); toggleSelect(photo.id) }}>
+                          <div className="h-6 w-6 rounded-md border-2 flex items-center justify-center transition-all"
+                            style={{ borderColor: isSelected ? '#38C5B5' : 'rgba(255,255,255,0.6)', background: isSelected ? '#38C5B5' : 'rgba(0,0,0,0.3)' }}>
+                            {isSelected && <CheckCircle className="w-4 h-4 text-white" />}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {/* Date + caption BELOW the photo */}
+                    <div className="px-2.5 py-2">
+                      <p className="text-[11px] font-semibold" style={{ color: '#1A2332' }}>{photoDate}</p>
+                      {photo.caption && <p className="text-[10px] mt-0.5 truncate" style={{ color: '#5D7380' }}>{photo.caption}</p>}
+                    </div>
                   </motion.div>
                 )
               })}

@@ -322,21 +322,24 @@ export default function DashboardPage() {
                   <p className="text-[13px] font-medium mt-0.5" style={{ color: '#5D7380' }}>{stat.label}</p>
                   <AnimatePresence>
                     {expandedStat === stat.key && (
-                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'visible' }}>
                         <div className="pt-3 mt-3 border-t" style={{ borderColor: '#EDF0F4' }}>
                           {stat.key === 'active' && (
-                            <div className="max-h-[280px] overflow-y-auto space-y-2 -mx-1 px-1">
+                            <div className="max-h-[300px] overflow-y-auto space-y-1 -mx-1 px-1" style={{ WebkitOverflowScrolling: 'touch' }}>
                               {projects.filter(p => p.status === 'ACTIVE').map(p => (
-                                <div key={p.id} onClick={(e) => { e.stopPropagation(); navigateTo('project-detail', p.id); selectProject(p as any); }} className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-black/5 cursor-pointer">
-                                  <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 bg-gray-100"><img src={p.coverImage || ''} alt="" className="w-full h-full object-cover" /></div>
-                                  <p className="text-[12px] font-medium truncate flex-1" style={{ color: '#35414A' }}>{p.name}</p>
-                                  <span className="text-[10px] font-bold shrink-0" style={{ color: '#38C5B5' }}>{p._count.photos}f</span>
+                                <div key={p.id} onClick={(e) => { e.stopPropagation(); navigateTo('project-detail', p.id); selectProject(p as any); }} className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-black/5 active:bg-black/10 cursor-pointer">
+                                  <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-gray-100"><img src={p.coverImage || ''} alt="" className="w-full h-full object-cover" /></div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[12px] font-semibold truncate" style={{ color: '#35414A' }}>{p.name}</p>
+                                    <p className="text-[10px]" style={{ color: '#ADB5B7' }}>{p._count.photos} fotos</p>
+                                  </div>
+                                  <ChevronRight className="w-3.5 h-3.5 shrink-0" style={{ color: '#ADB5B7' }} />
                                 </div>
                               ))}
                             </div>
                           )}
                           {stat.key === 'photos' && (
-                            <div className="max-h-[280px] overflow-y-auto space-y-2 -mx-1 px-1">
+                            <div className="max-h-[300px] overflow-y-auto space-y-1 -mx-1 px-1" style={{ WebkitOverflowScrolling: 'touch' }}>
                               {projects.filter(p => p._count.photos > 0).sort((a,b) => b._count.photos - a._count.photos).map(p => (
                                 <div key={p.id} onClick={(e) => { e.stopPropagation(); navigateTo('project-detail', p.id); selectProject(p as any); }} className="flex items-center justify-between p-2 rounded-lg hover:bg-black/5 cursor-pointer">
                                   <p className="text-[12px] font-medium truncate" style={{ color: '#35414A' }}>{p.name}</p>
