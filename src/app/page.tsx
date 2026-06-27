@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { AppLayout } from '@/components/castalia/app-layout'
 import LoginPage from '@/components/castalia/login-page'
@@ -13,6 +14,22 @@ import SettingsPage from '@/components/castalia/settings-page'
 
 export default function Home() {
   const currentView = useAppStore((s) => s.currentView)
+  const isAuthenticated = useAppStore((s) => s.isAuthenticated)
+  const login = useAppStore((s) => s.login)
+
+  // Restore session from localStorage on first load
+  useEffect(() => {
+    if (isAuthenticated) return
+    try {
+      const raw = localStorage.getItem('castalia-auth')
+      if (raw) {
+        const { currentUser, token } = JSON.parse(raw)
+        if (currentUser && token) {
+          login(currentUser, token)
+        }
+      }
+    } catch {}
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const views: Record<string, React.ReactNode> = {
     dashboard: <DashboardPage />,

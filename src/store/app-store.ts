@@ -354,21 +354,42 @@ interface AppStore {
 
 // ─── Store ───────────────────────────────────────────────────────────────────
 
+// ─── Persist helpers ─────────────────────────────────────────────────────
+const STORAGE_KEY = 'castalia-auth';
+function loadPersistedAuth(): { currentUser: User | null; token: string | null } {
+  if (typeof window === 'undefined') return { currentUser: null, token: null };
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return { currentUser: null, token: null };
+}
+function persistAuth(user: User | null, token: string | null) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (user && token) localStorage.setItem(STORAGE_KEY, JSON.stringify({ currentUser: user, token }));
+    else localStorage.removeItem(STORAGE_KEY);
+  } catch {}
+}
+
 export const useAppStore = create<AppStore>((set, get) => ({
   // ── Auth ──
   currentUser: null,
   token: null,
   isAuthenticated: false,
 
-  login: (user, token) =>
+  login: (user, token) => {
+    persistAuth(user, token);
     set({
       currentUser: user,
       token,
       isAuthenticated: true,
       currentView: 'dashboard' as View,
-    }),
+    });
+  },
 
-  logout: () =>
+  logout: () => {
+    persistAuth(null, null);
     set({
       currentUser: null,
       token: null,
@@ -384,7 +405,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
       clientShares: [],
       notifications: [],
       unreadCount: 0,
-    }),
+    });
+  },
 
   // ── Navigation ──
   currentView: 'login' as View,
