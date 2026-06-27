@@ -41,7 +41,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import PhotoUploadModal from '@/components/castalia/photo-upload-modal';
-import PhotoLightbox from '@/components/castalia/photo-lightbox';
+// PhotoLightbox disabled — has missing store props, causes runtime crash
+// import PhotoLightbox from '@/components/castalia/photo-lightbox';
 
 // ─── Nav Items ───────────────────────────────────────────────────────────────
 
@@ -599,7 +600,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 
         {/* ── Global Modals ── */}
         <PhotoUploadModal />
-        <PhotoLightbox />
+        {/* PhotoLightbox temporarily disabled */}
       </div>
     </TooltipProvider>
   );
