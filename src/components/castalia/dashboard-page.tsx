@@ -17,6 +17,7 @@ import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useAppStore, STATUS_CONFIG, PRIORITY_CONFIG, ROLE_LABELS } from '@/store/app-store'
 import { useToast } from '@/hooks/use-toast'
+import CreateProjectModal from '@/components/castalia/create-project-modal'
 
 // ─── Types ─────────────────────────────────────────────
 interface ApiProject {
@@ -53,6 +54,7 @@ export default function DashboardPage() {
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [priorityFilter, setPriorityFilter] = useState('ALL')
   const [searchOpen, setSearchOpen] = useState(false)
+  const [showCreateProject, setShowCreateProject] = useState(false)
 
   useEffect(() => {
     async function loadData() {
@@ -186,7 +188,7 @@ export default function DashboardPage() {
 
           <div className="flex items-center gap-2 ml-auto">
             {isManagerOrAdmin() && (
-              <Button onClick={() => toast({ title: 'Crear Proyecto', description: 'Formulario de nuevo proyecto' })}
+              <Button onClick={() => setShowCreateProject(true)}
                 className="hidden sm:flex h-10 px-5 rounded-xl text-[13px] font-semibold text-white border-0 gap-2"
                 style={{ background: 'linear-gradient(135deg, #38C5B5, #2DA194)', boxShadow: '0 1px 8px rgba(56,197,181,0.2)' }}>
                 <Plus className="w-4 h-4" strokeWidth={2.5} />
@@ -392,6 +394,15 @@ export default function DashboardPage() {
               <FolderKanban className="w-12 h-12 mx-auto mb-4" style={{ color: '#ADB5B7' }} />
               <p className="text-[16px] font-semibold" style={{ color: '#35414A' }}>Sin proyectos encontrados</p>
               <p className="text-[14px] mt-1" style={{ color: '#5D7380' }}>Ajusta los filtros o crea un nuevo proyecto</p>
+              {isManagerOrAdmin() && (
+                <button
+                  onClick={() => setShowCreateProject(true)}
+                  className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white"
+                  style={{ background: 'linear-gradient(135deg, #38C5B5, #2DA194)' }}>
+                  <Plus className="w-4 h-4" strokeWidth={2.5} />
+                  Crear Proyecto
+                </button>
+              )}
             </div>
           )}
 
@@ -497,6 +508,19 @@ export default function DashboardPage() {
           </div>
         </SheetContent>
       </Sheet>
+
+      <CreateProjectModal open={showCreateProject} onClose={() => setShowCreateProject(false)} />
+
+      {/* Mobile FAB */}
+      {isManagerOrAdmin() && (
+        <button
+          onClick={() => setShowCreateProject(true)}
+          className="sm:hidden fixed bottom-20 right-4 z-30 h-14 w-14 rounded-full flex items-center justify-center shadow-lg"
+          style={{ background: 'linear-gradient(135deg, #38C5B5, #2DA194)', boxShadow: '0 4px 20px rgba(56,197,181,0.4)' }}
+        >
+          <Plus className="h-6 w-6 text-white" strokeWidth={2.5} />
+        </button>
+      )}
     </div>
   )
 }
