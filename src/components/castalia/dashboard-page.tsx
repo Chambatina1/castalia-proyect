@@ -138,12 +138,13 @@ interface ApiProjectWithPhotos extends ApiProject {
     if (!renameTarget || !renameValue.trim()) return
     setRenaming(true)
     try {
-      await fetch(`/api/projects/${renameTarget.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: renameValue.trim() }) })
+      const res = await fetch(`/api/projects/${renameTarget.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: renameValue.trim() }) })
+      if (!res.ok) throw new Error(`Server returned ${res.status}`)
       setProjects(prev => prev.map(p => p.id === renameTarget.id ? { ...p, name: renameValue.trim() } : p))
       toast({ title: 'Proyecto renombrado' })
       setRenameTarget(null)
     } catch {
-      toast({ title: 'Error al renombrar', variant: 'destructive' })
+      toast({ title: 'Error al renombrar', description: 'No se pudo guardar el nombre', variant: 'destructive' })
     } finally { setRenaming(false) }
   }
 
@@ -159,11 +160,12 @@ interface ApiProjectWithPhotos extends ApiProject {
     if (!noteTarget) return
     setSavingNote(true)
     try {
-      await fetch(`/api/projects/${noteTarget.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ description: noteValue }) })
+      const res = await fetch(`/api/projects/${noteTarget.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ description: noteValue }) })
+      if (!res.ok) throw new Error(`Server returned ${res.status}`)
       toast({ title: 'Nota guardada' })
       setNoteTarget(null)
     } catch {
-      toast({ title: 'Error al guardar', variant: 'destructive' })
+      toast({ title: 'Error al guardar nota', variant: 'destructive' })
     } finally { setSavingNote(false) }
   }
 

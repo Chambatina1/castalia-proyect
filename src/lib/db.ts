@@ -16,8 +16,22 @@ if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
 async function ensureSafeDB() {
   try {
     await db.$executeRawUnsafe('PRAGMA journal_mode=WAL')
-    await db.$executeRawUnsafe('PRAGMA synchronous=NORMAL')
+    await db.$executeRawUnsafe('PRAGMA synchronous=FULL')
     await db.$executeRawUnsafe('PRAGMA wal_autocheckpoint=1000')
+    // Immediately checkpoint any pending WAL on startup
+    await db.$executeRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE)')
   } catch {}
 }
 ensureSafeDB()
+
+// Graceful shutdown: checkpoint WAL so no data is lost when Render stops the service
+function gracefulShutdown() {
+  try {
+    db.$executeRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE)').catch(() => {})
+    setTimeout(() => process.exit(0), 500)
+  } catch {
+    process.exit(0)
+  }
+}
+process.on('SIGTERM', gracefulShutdown)
+process.on('SIGINT', gracefulShutdown)
