@@ -18,6 +18,7 @@ interface DropboxConfig {
   accountName?: string;
   accountEmail?: string;
   lastBackupAt?: string;
+  baseFolder?: string;
 }
 
 async function loadConfig(): Promise<DropboxConfig | null> {
@@ -205,6 +206,7 @@ export async function GET() {
       accountEmail: data.email,
       connectedAt: config.connectedAt,
       lastBackupAt: config.lastBackupAt || null,
+      baseFolder: config.baseFolder || '/Castalia Proyect',
     });
   } catch {
     return NextResponse.json({ connected: false });
@@ -250,17 +252,46 @@ export async function POST(request: NextRequest) {
         accountName: accountData.name?.display_name,
         accountEmail: accountData.email,
       };
+      // Use existing baseFolder or default
+      if (!config.baseFolder) config.baseFolder = '/Castalia Proyect';
       await saveConfig(config);
 
       // Create folder structure
-      await ensureDropboxFolder(config.accessToken, '/Castalia Proyect');
-      await ensureDropboxFolder(config.accessToken, '/Castalia Proyect/_backups');
+      await ensureDropboxFolder(config.accessToken, config.baseFolder);
+      await ensureDropboxFolder(config.accessToken, `${config.baseFolder}/_backups`);
 
       return NextResponse.json({
         success: true,
         accountName: config.accountName,
         accountEmail: config.accountEmail,
       });
+    }
+
+    // ─── SET BASE FOLDER ───
+    if (action === 'set-base-folder') {
+      const config = await loadConfig();
+      if (!config?.accessToken) {
+        return NextResponse.json({ error: 'Dropbox not connected' }, { status: 400 });
+      }
+
+      const { baseFolder } = body;
+      if (!baseFolder?.trim()) {
+        return NextResponse.json({ error: 'Folder path required' }, { status: 400 });
+      }
+
+      // Normalize: must start with /
+      let folder = baseFolder.trim();
+      if (!folder.startsWith('/')) folder = '/' + folder;
+      if (folder.endsWith('/')) folder = folder.slice(0, -1);
+
+      config.baseFolder = folder;
+      await saveConfig(config);
+
+      // Create the folder in Dropbox
+      await ensureDropboxFolder(config.accessToken, folder);
+      await ensureDropboxFolder(config.accessToken, `${folder}/_backups`);
+
+      return NextResponse.json({ success: true, baseFolder: folder });
     }
 
     // ─── DISCONNECT ───
@@ -296,7 +327,8 @@ export async function POST(request: NextRequest) {
       }
 
       const projectName = sanitize(project.name);
-      const baseFolder = `/Castalia Proyect/${projectName}`;
+      const rootFolder = config.baseFolder?.trim() || '/Castalia Proyect';
+      const baseFolder = `${rootFolder}/${projectName}`;
       await ensureDropboxFolder(config.accessToken, baseFolder);
 
       let uploaded = 0;
@@ -417,10 +449,11 @@ export async function POST(request: NextRequest) {
       if (!photo) return NextResponse.json({ skipped: true });
 
       const projectName = sanitize(photo.project.name);
+      const rootFolder = config.baseFolder?.trim() || '/Castalia Proyect';
       const catName = sanitize(subProductName || 'General');
       const phaseFolder = fase === 'antes' ? 'ANTES' : fase === 'despues' ? 'DESPUÉS' : null;
 
-      let dropboxDir = `/Castalia Proyect/${projectName}/${catName}`;
+      let dropboxDir = `${rootFolder}/${projectName}/${catName}`;
       if (phaseFolder) {
         dropboxDir += `/${phaseFolder}`;
       }
@@ -477,7 +510,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Dropbox no conectado' }, { status: 400 });
       }
 
-      const entries = await listDropboxFolder(config.accessToken, '/Castalia Proyect/_backups');
+      const rootFolder = config.baseFolder?.trim() || '/Castalia Proyect';
+      const entries = await listDropboxFolder(config.accessToken, `${rootFolder}/_backups`);
       const backups = entries
         .filter(e => e['.tag'] === 'file' && e.name.endsWith('.json'))
         .map(e => ({
@@ -497,12 +531,18 @@ export async function POST(request: NextRequest) {
   }
 }
 
+async function getBackupFolder(): Promise<string> {
+  const config = await loadConfig();
+  return `${config?.baseFolder?.trim() || '/Castalia Proyect'}/_backups`;
+}
+
 // ─── Database Backup ───
 
 async function backupDatabaseToDropbox(token: string): Promise<{ success: boolean; message: string; backupFile?: string }> {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const backupFile = `backup-${timestamp}.json`;
-  const dropboxPath = `/Castalia Proyect/_backups/${backupFile}`;
+  const backupsDir = await getBackupFolder();
+  const dropboxPath = `${backupsDir}/${backupFile}`;
 
   // Export all data
   const [projects, subProducts, photos, users, tasks, activityLogs] = await Promise.all([
@@ -537,7 +577,7 @@ async function backupDatabaseToDropbox(token: string): Promise<{ success: boolea
 
   const jsonStr = JSON.stringify(backupData, null, 2);
 
-  await ensureDropboxFolder(token, '/Castalia Proyect/_backups');
+  await ensureDropboxFolder(token, backupsDir);
 
   const ok = await uploadJsonToDropbox(token, jsonStr, dropboxPath);
   if (ok) {
@@ -550,7 +590,7 @@ async function backupDatabaseToDropbox(token: string): Promise<{ success: boolea
 
     // Keep only last 10 backups
     try {
-      const entries = await listDropboxFolder(token, '/Castalia Proyect/_backups');
+      const entries = await listDropboxFolder(token, backupsDir);
       const backupFiles = entries
         .filter(e => e['.tag'] === 'file' && e.name.startsWith('backup-') && e.name.endsWith('.json'))
         .sort((a, b) => a.name.localeCompare(b.name));
@@ -575,13 +615,14 @@ async function backupDatabaseToDropbox(token: string): Promise<{ success: boolea
 
 async function restoreDatabaseFromDropbox(token: string): Promise<{ success: boolean; message: string; stats?: Record<string, number> }> {
   // Find latest backup
-  const entries = await listDropboxFolder(token, '/Castalia Proyect/_backups');
+  const backupsDir = await getBackupFolder();
+  const entries = await listDropboxFolder(token, backupsDir);
   const backupFiles = entries
     .filter(e => e['.tag'] === 'file' && e.name.startsWith('backup-') && e.name.endsWith('.json'))
     .sort((a, b) => b.name.localeCompare(a.name));
 
   if (backupFiles.length === 0) {
-    return { success: false, message: 'No hay backups disponibles en Dropbox' };
+    return { success: false, message: 'No backups available in Dropbox' };
   }
 
   const latestBackup = backupFiles[0];

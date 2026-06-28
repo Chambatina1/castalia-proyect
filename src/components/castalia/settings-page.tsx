@@ -297,6 +297,8 @@ function DropboxSection() {
   const [accountEmail, setAccountEmail] = useState('')
   const [connecting, setConnecting] = useState(false)
   const [lastBackupAt, setLastBackupAt] = useState<string | null>(null)
+  const [baseFolder, setBaseFolder] = useState('/Castalia Proyect')
+  const [savingFolder, setSavingFolder] = useState(false)
 
   // Backup/restore state
   const [backingUp, setBackingUp] = useState(false)
@@ -315,6 +317,7 @@ function DropboxSection() {
         setAccountName(data.accountName || '')
         setAccountEmail(data.accountEmail || '')
         setLastBackupAt(data.lastBackupAt || null)
+        setBaseFolder(data.baseFolder || '/Castalia Proyect')
       } else {
         setStatus('disconnected')
       }
@@ -504,12 +507,57 @@ function DropboxSection() {
                 <div>
                   <p className="text-sm font-semibold mb-1" style={{ color: '#115E59' }}>Dropbox como base de datos</p>
                   <p className="text-xs leading-relaxed" style={{ color: '#2DA194' }}>
-                    Tus datos están protegidos. Cada foto se copia automáticamente a tu Dropbox en <strong>/Castalia Proyect/</strong>.
-                    Además, se guarda un backup completo de la base de datos (proyectos, categorías, notas) como JSON.
-                    Si pierdes datos, puedes restaurarlos desde Dropbox.
+                    Tus datos están protegidos. Cada foto se copia automáticamente a tu Dropbox.
+                    Además, se guarda un backup completo de la base de datos como JSON.
                   </p>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Base folder config */}
+          {status === 'connected' && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium" style={{ color: '#35414A' }}>Carpeta en Dropbox</label>
+              <div className="flex gap-2">
+                <input
+                  value={baseFolder}
+                  onChange={e => setBaseFolder(e.target.value)}
+                  placeholder="/MiCarpeta"
+                  className="flex-1 h-10 px-4 rounded-lg border text-sm focus:outline-none"
+                  style={{ borderColor: '#E2E6EB', color: '#1A2332' }}
+                />
+                <button
+                  onClick={async () => {
+                    setSavingFolder(true)
+                    try {
+                      const res = await fetch('/api/dropbox', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'set-base-folder', baseFolder }),
+                      })
+                      const data = await res.json()
+                      if (data.success) {
+                        setBaseFolder(data.baseFolder)
+                        toast({ title: 'Carpeta actualizada', description: data.baseFolder })
+                      } else {
+                        toast({ title: data.error || 'Error', variant: 'destructive' })
+                      }
+                    } catch {
+                      toast({ title: 'Error', variant: 'destructive' })
+                    } finally {
+                      setSavingFolder(false)
+                    }
+                  }}
+                  disabled={savingFolder}
+                  className="h-10 px-5 rounded-lg text-sm font-bold text-white disabled:opacity-40 transition-colors"
+                  style={{ background: '#38C5B5' }}>
+                  {savingFolder ? '...' : 'Guardar'}
+                </button>
+              </div>
+              <p className="text-xs" style={{ color: '#5D7380' }}>
+                Los proyectos se guardarán dentro de esta carpeta. Ejemplo: <code>{baseFolder}/Nombre del Proyecto/Categoría/</code>
+              </p>
             </div>
           )}
         </CardContent>
