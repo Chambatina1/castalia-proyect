@@ -137,12 +137,15 @@ export default function DashboardPage() {
     setRenaming(true)
     try {
       const res = await fetch(`/api/projects/${renameTarget.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: renameValue.trim() }) })
-      if (!res.ok) throw new Error(`Server returned ${res.status}`)
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `Server error ${res.status}`)
+      }
       setProjects(prev => prev.map(p => p.id === renameTarget.id ? { ...p, name: renameValue.trim() } : p))
       toast({ title: 'Proyecto renombrado' })
       setRenameTarget(null)
-    } catch {
-      toast({ title: 'Error al renombrar', description: 'No se pudo guardar el nombre', variant: 'destructive' })
+    } catch (err: any) {
+      toast({ title: 'Error al renombrar', description: err?.message || 'No se pudo guardar', variant: 'destructive' })
     } finally { setRenaming(false) }
   }
 
@@ -555,15 +558,15 @@ export default function DashboardPage() {
                       {!reorderMode && (
                         <div className="absolute top-3 right-3 flex gap-1">
                           <button onClick={(e) => { e.stopPropagation(); openRename(project) }}
-                            className="h-8 w-8 rounded-lg flex items-center justify-center sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-sm hover:!bg-[#38C5B5]/80">
+                            className="h-9 w-9 rounded-lg flex items-center justify-center bg-black/40 backdrop-blur-sm active:bg-[#38C5B5]/80 transition-colors">
                             <Pencil className="w-3.5 h-3.5 text-white" />
                           </button>
                           <button onClick={(e) => { e.stopPropagation(); openNote(project) }}
-                            className="h-8 w-8 rounded-lg flex items-center justify-center sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-sm hover:!bg-[#F0A030]/80">
+                            className="h-9 w-9 rounded-lg flex items-center justify-center bg-black/40 backdrop-blur-sm active:bg-[#F0A030]/80 transition-colors">
                             <FileText className="w-3.5 h-3.5 text-white" />
                           </button>
                           <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(project) }}
-                            className="h-8 w-8 rounded-lg flex items-center justify-center sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-sm hover:!bg-red-500/80">
+                            className="h-9 w-9 rounded-lg flex items-center justify-center bg-black/40 backdrop-blur-sm active:bg-red-500/80 transition-colors">
                             <Trash2 className="w-3.5 h-3.5 text-white" />
                           </button>
                         </div>
