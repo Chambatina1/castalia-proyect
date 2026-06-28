@@ -43,7 +43,9 @@ function timeAgo(dateStr: string) {
 function getAvatarStyle(i: number) { return { background: `linear-gradient(135deg, ${AVATAR_COLORS[i % AVATAR_COLORS.length]}, ${AVATAR_COLORS[(i + 2) % AVATAR_COLORS.length]})` } }
 
 // ─── Component ─────────────────────────────────────────
-export default function DashboardPage() {
+interface ApiProjectWithPhotos extends ApiProject {
+  photos: { url: string; id: string }[]
+}
   const { currentUser, navigateTo, logout, mobileMenuOpen, setMobileMenuOpen, isManagerOrAdmin, selectProject } = useAppStore()
   const { toast } = useToast()
 
@@ -101,7 +103,7 @@ export default function DashboardPage() {
   const loadData = useCallback(async () => {
     try {
       const [projRes, actRes] = await Promise.allSettled([
-        fetch('/api/projects').then(r => r.json()),
+        fetch('/api/projects/with-photos').then(r => r.json()),
         fetch('/api/activity?limit=10').then(r => r.json()),
       ])
       if (projRes.status === 'fulfilled' && Array.isArray(projRes.value)) setProjects(projRes.value)
