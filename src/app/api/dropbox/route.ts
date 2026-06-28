@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { readFile, writeFile, mkdir, readdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join, basename } from 'path';
 import { db } from '@/lib/db';
@@ -19,6 +19,8 @@ interface DropboxConfig {
   accountEmail?: string;
   lastBackupAt?: string;
   baseFolder?: string;
+  appKey?: string;
+  appSecret?: string;
 }
 
 async function loadConfig(): Promise<DropboxConfig | null> {
@@ -190,13 +192,15 @@ export async function GET() {
   try {
     const config = await loadConfig();
     if (!config) {
-      return NextResponse.json({ connected: false });
+      // Check if there's a partial config with just app credentials
+      return NextResponse.json({ connected: false, hasAppCredentials: false });
     }
 
     // Verify token is still valid
     const res = await dropboxApi(config.accessToken, '/users/get_current_account', null);
     if (!res.ok) {
-      return NextResponse.json({ connected: false, error: 'Token inválido' });
+      // Token invalid but app credentials might still be configured
+      return NextResponse.json({ connected: false, error: 'Token inválido', hasAppCredentials: !!(config.appKey && config.appSecret) });
     }
 
     const data = await res.json();
@@ -207,6 +211,7 @@ export async function GET() {
       connectedAt: config.connectedAt,
       lastBackupAt: config.lastBackupAt || null,
       baseFolder: config.baseFolder || '/Castalia Proyect',
+      hasAppCredentials: !!(config.appKey && config.appSecret),
     });
   } catch {
     return NextResponse.json({ connected: false });
@@ -220,7 +225,28 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { action } = body;
 
-    // ─── CONNECT ───
+    // ─── SAVE APP CREDENTIALS ───
+    if (action === 'save-app-credentials') {
+      const { appKey, appSecret } = body;
+      if (!appKey?.trim() || !appSecret?.trim()) {
+        return NextResponse.json({ error: 'App Key y App Secret son requeridos' }, { status: 400 });
+      }
+      const config = await loadConfig();
+      const updated: DropboxConfig = {
+        accessToken: config?.accessToken || '',
+        connectedAt: config?.connectedAt || '',
+        accountName: config?.accountName,
+        accountEmail: config?.accountEmail,
+        lastBackupAt: config?.lastBackupAt,
+        baseFolder: config?.baseFolder || '/Castalia Proyect',
+        appKey: appKey.trim(),
+        appSecret: appSecret.trim(),
+      };
+      await saveConfig(updated);
+      return NextResponse.json({ success: true });
+    }
+
+    // ─── CONNECT (manual token) ───
     if (action === 'connect') {
       const { accessToken } = body;
       if (!accessToken?.trim()) {
@@ -339,7 +365,7 @@ export async function POST(request: NextRequest) {
       let uploadFiles: string[] = [];
       try {
         if (existsSync(UPLOAD_DIR)) {
-          uploadFiles = readdirSync(UPLOAD_DIR);
+          uploadFiles = (await readdir(UPLOAD_DIR));
         }
       } catch {}
 

@@ -304,7 +304,32 @@ function DropboxSection() {
   const [backingUp, setBackingUp] = useState(false)
   const [restoring, setRestoring] = useState(false)
 
+  // OAuth state
+  const [appKey, setAppKey] = useState('')
+  const [appSecret, setAppSecret] = useState('')
+  const [hasAppCredentials, setHasAppCredentials] = useState(false)
+  const [savingKeys, setSavingKeys] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+
   useEffect(() => {
+    // Check for OAuth callback params
+    const params = new URLSearchParams(window.location.search)
+    const dropboxResult = params.get('dropbox')
+    if (dropboxResult === 'connected') {
+      toast({ title: 'Dropbox conectado!', description: 'Tu cuenta de Dropbox fue vinculada exitosamente.' })
+      // Clean URL
+      window.history.replaceState({}, '', '/settings')
+    } else if (dropboxResult === 'denied') {
+      const msg = params.get('msg')
+      toast({ title: 'Acceso denegado', description: msg || 'No autorizaste la conexión con Dropbox.', variant: 'destructive' })
+      window.history.replaceState({}, '', '/settings')
+    } else if (dropboxResult === 'token_error' || dropboxResult === 'callback_error' || dropboxResult === 'verify_error') {
+      toast({ title: 'Error de conexión', description: 'Hubo un problema al conectar con Dropbox. Intenta de nuevo.', variant: 'destructive' })
+      window.history.replaceState({}, '', '/settings')
+    } else if (dropboxResult === 'need_app_keys') {
+      toast({ title: 'Configura tus claves', description: 'Primero ingresa el App Key y App Secret de tu app de Dropbox.', variant: 'destructive' })
+      window.history.replaceState({}, '', '/settings')
+    }
     checkStatus()
   }, [])
 
@@ -312,6 +337,7 @@ function DropboxSection() {
     try {
       const res = await fetch('/api/dropbox')
       const data = await res.json()
+      setHasAppCredentials(data.hasAppCredentials || false)
       if (data.connected) {
         setStatus('connected')
         setAccountName(data.accountName || '')
@@ -324,6 +350,33 @@ function DropboxSection() {
     } catch {
       setStatus('disconnected')
     }
+  }
+
+  const saveAppCredentials = async () => {
+    if (!appKey.trim() || !appSecret.trim()) return
+    setSavingKeys(true)
+    try {
+      const res = await fetch('/api/dropbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'save-app-credentials', appKey: appKey.trim(), appSecret: appSecret.trim() }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setHasAppCredentials(true)
+        toast({ title: 'Claves guardadas', description: 'Ahora puedes conectar con Dropbox con un clic.' })
+      } else {
+        toast({ title: data.error || 'Error', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error de conexión', variant: 'destructive' })
+    } finally {
+      setSavingKeys(false)
+    }
+  }
+
+  const connectWithOAuth = () => {
+    window.location.href = '/api/dropbox/auth'
   }
 
   const connect = async () => {
@@ -464,37 +517,122 @@ function DropboxSection() {
             )}
           </div>
 
-          {/* Token input */}
+          {/* ─── DISCONNECTED: App Credentials + OAuth ─── */}
           {status === 'disconnected' && (
             <>
-              <div className="space-y-2">
-                <label className="text-sm font-medium" style={{ color: '#35414A' }}>Token de acceso de Dropbox</label>
-                <div className="flex gap-2">
-                  <input
-                    value={token}
-                    onChange={e => setToken(e.target.value)}
-                    placeholder="sl.xxxxxxxxxxxxx..."
-                    className="flex-1 h-10 px-4 rounded-lg border text-sm focus:outline-none"
-                    style={{ borderColor: '#E2E6EB', color: '#1A2332' }}
-                    type="password"
-                  />
-                  <button onClick={connect} disabled={connecting || !token.trim()}
-                    className="h-10 px-5 rounded-lg text-sm font-bold text-white disabled:opacity-40 transition-colors"
+              {/* Step 1: App Credentials */}
+              {!hasAppCredentials && (
+                <div className="space-y-3">
+                  <div className="p-4 rounded-xl border" style={{ borderColor: '#E2E6EB', background: '#F7F8FA' }}>
+                    <p className="text-sm font-semibold mb-3" style={{ color: '#1A2332' }}>
+                      Paso 1: Obtén tus claves de la app de Dropbox
+                    </p>
+                    <ol className="text-xs space-y-2" style={{ color: '#5D7380' }}>
+                      <li className="flex gap-2">
+                        <span className="font-bold text-blue-600 shrink-0">1.</span>
+                        <span>Ve a <strong>dropbox.com/developers/apps</strong> e inicia sesión</span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="font-bold text-blue-600 shrink-0">2.</span>
+                        <span>Selecciona tu app (o crea una nueva: <strong>Scoped access</strong> → <strong>Full Dropbox</strong>)</span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="font-bold text-blue-600 shrink-0">3.</span>
+                        <span>En la pestaña <strong>Permissions</strong>, activa: <code className="bg-gray-200 px-1 rounded">files.content.write</code> y <code className="bg-gray-200 px-1 rounded">files.content.read</code></span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="font-bold text-blue-600 shrink-0">4.</span>
+                        <span>En la pestaña <strong>Settings</strong>, agrega esta URL en <strong>Redirect URIs</strong>: <code className="bg-gray-200 px-1 rounded text-blue-700 break-all">{typeof window !== 'undefined' ? window.location.origin : ''}/api/dropbox/callback</code></span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className="font-bold text-blue-600 shrink-0">5.</span>
+                        <span>Copia el <strong>App key</strong> y <strong>App secret</strong> de la sección "App key and secret"</span>
+                      </li>
+                    </ol>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium" style={{ color: '#35414A' }}>App Key</label>
+                    <input
+                      value={appKey}
+                      onChange={e => setAppKey(e.target.value)}
+                      placeholder="Ej: abc123def456..."
+                      className="w-full h-10 px-4 rounded-lg border text-sm focus:outline-none"
+                      style={{ borderColor: '#E2E6EB', color: '#1A2332' }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium" style={{ color: '#35414A' }}>App Secret</label>
+                    <input
+                      value={appSecret}
+                      onChange={e => setAppSecret(e.target.value)}
+                      placeholder="Ej: xyz789..."
+                      className="w-full h-10 px-4 rounded-lg border text-sm focus:outline-none"
+                      style={{ borderColor: '#E2E6EB', color: '#1A2332' }}
+                      type="password"
+                    />
+                  </div>
+
+                  <button onClick={saveAppCredentials} disabled={savingKeys || !appKey.trim() || !appSecret.trim()}
+                    className="w-full h-11 rounded-xl text-sm font-bold text-white disabled:opacity-40 transition-colors"
                     style={{ background: '#0061FF' }}>
-                    {connecting ? '...' : 'Conectar'}
+                    {savingKeys ? 'Guardando...' : 'Guardar claves'}
                   </button>
                 </div>
-              </div>
+              )}
 
-              <div className="p-4 rounded-xl border" style={{ borderColor: '#E2E6EB', background: '#F7F8FA' }}>
-                <p className="text-sm font-semibold mb-2" style={{ color: '#1A2332' }}>¿Cómo obtener el token?</p>
-                <ol className="text-xs space-y-1.5" style={{ color: '#5D7380' }}>
-                  <li>1. Ve a <strong>dropbox.com/developers/apps</strong></li>
-                  <li>2. Crea una app → <strong>Scoped access</strong> → <strong>Full Dropbox</strong></li>
-                  <li>3. En <strong>Permissions</strong>, activa: <code>files.content.write</code> y <code>files.content.read</code></li>
-                  <li>4. Ve a la pestaña <strong>Generated access token</strong></li>
-                  <li>5. Copia el token y pégalo aquí</li>
-                </ol>
+              {/* Step 2: Connect with OAuth (when credentials are saved) */}
+              {hasAppCredentials && (
+                <div className="space-y-3">
+                  <button
+                    onClick={connectWithOAuth}
+                    className="w-full flex items-center justify-center gap-3 h-14 rounded-xl text-white font-bold text-base transition-all hover:opacity-90 active:scale-[0.98]"
+                    style={{ background: 'linear-gradient(135deg, #0061FF 0%, #0052D4 100%)' }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M6.4 11.2a4.8 4.8 0 0 1 4.2-4.7A6 6 0 0 1 19.5 9c0 .3 0 .7-.1 1a3.6 3.6 0 0 1-.7 7.1H6.9a4.8 4.8 0 0 1-.5-9.6zm4.2 0a3.2 3.2 0 0 0-3.1 3.2 3.2 3.2 0 0 0 3.1 3.2h8.5a2.4 2.4 0 0 0 .5-4.8l-.5-.1.1-.5a4.8 4.8 0 0 0-8.6-1z"/></svg>
+                    Conectar con Dropbox
+                  </button>
+                  <p className="text-xs text-center" style={{ color: '#5D7380' }}>
+                    Se abrirá la página de Dropbox para que autorices la conexión. Solo necesitas hacer clic en "Permitir".
+                  </p>
+
+                  {/* Option to reconfigure credentials */}
+                  <button
+                    onClick={() => { setHasAppCredentials(false) }}
+                    className="w-full text-xs text-center py-1 underline"
+                    style={{ color: '#5D7380' }}>
+                    Cambiar App Key / App Secret
+                  </button>
+                </div>
+              )}
+
+              {/* Advanced: manual token */}
+              <div>
+                <button
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="flex items-center gap-1 text-xs py-2"
+                  style={{ color: '#5D7380' }}>
+                  <ChevronRight className="h-3 w-3 transition-transform" style={{ transform: showAdvanced ? 'rotate(90deg)' : 'none' }} />
+                  Conexión manual con token (avanzado)
+                </button>
+                {showAdvanced && (
+                  <div className="space-y-2 pt-1">
+                    <div className="flex gap-2">
+                      <input
+                        value={token}
+                        onChange={e => setToken(e.target.value)}
+                        placeholder="sl.xxxxxxxxxxxxx..."
+                        className="flex-1 h-10 px-4 rounded-lg border text-sm focus:outline-none"
+                        style={{ borderColor: '#E2E6EB', color: '#1A2332' }}
+                        type="password"
+                      />
+                      <button onClick={connect} disabled={connecting || !token.trim()}
+                        className="h-10 px-5 rounded-lg text-sm font-bold text-white disabled:opacity-40 transition-colors"
+                        style={{ background: '#0061FF' }}>
+                        {connecting ? '...' : 'Conectar'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}
