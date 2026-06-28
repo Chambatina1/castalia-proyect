@@ -665,11 +665,19 @@ export default function ProjectDetailPage() {
                       </div>
                       {/* Rename inline */}
                       {renamingSubId === sub.id && (
-                        <div className="absolute inset-0 bg-white/95 flex items-center justify-center p-4 z-10" onClick={e => e.stopPropagation()}>
+                        <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center p-3 z-10 gap-2" onClick={e => e.stopPropagation()}>
                           <input value={renameSubValue} onChange={e => setRenameSubValue(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter') renameSubProduct(sub.id); if (e.key === 'Escape') setRenamingSubId(null) }}
                             className="w-full h-10 px-3 rounded-lg border text-[13px] font-semibold text-center focus:outline-none"
                             style={{ borderColor: '#38C5B5', color: '#1A2332' }} autoFocus />
+                          <div className="flex gap-2 w-full">
+                            <button onClick={() => renameSubProduct(sub.id)}
+                              className="flex-1 h-9 rounded-lg text-[12px] font-bold text-white active:opacity-80"
+                              style={{ background: '#38C5B5' }}>Guardar</button>
+                            <button onClick={() => setRenamingSubId(null)}
+                              className="flex-1 h-9 rounded-lg text-[12px] font-semibold border active:bg-gray-100"
+                              style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>Cancelar</button>
+                          </div>
                         </div>
                       )}
                     </motion.div>
