@@ -225,17 +225,30 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Token requerido' }, { status: 400 });
       }
 
-      const res = await dropboxApi(accessToken.trim(), '/users/get_current_account', null);
-      if (!res.ok) {
-        return NextResponse.json({ error: 'Token inválido o expirado' }, { status: 401 });
+      // Verify token directly with fetch
+      let accountData: any = null;
+      try {
+        const checkRes = await fetch('https://api.dropboxapi.com/2/users/get_current_account', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken.trim()}`,
+            'Content-Type': 'application/json',
+          },
+          body: '{}',
+        });
+        if (!checkRes.ok) {
+          const errText = await checkRes.text();
+          return NextResponse.json({ error: `Token inválido: ${checkRes.status} ${errText}` }, { status: 401 });
+        }
+        accountData = await checkRes.json();
+      } catch (err) {
+        return NextResponse.json({ error: `Error verificando token: ${String(err)}` }, { status: 500 });
       }
-
-      const data = await res.json();
       const config: DropboxConfig = {
         accessToken: accessToken.trim(),
         connectedAt: new Date().toISOString(),
-        accountName: data.name?.display_name,
-        accountEmail: data.email,
+        accountName: accountData.name?.display_name,
+        accountEmail: accountData.email,
       };
       await saveConfig(config);
 
