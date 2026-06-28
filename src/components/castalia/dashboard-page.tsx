@@ -43,9 +43,7 @@ function timeAgo(dateStr: string) {
 function getAvatarStyle(i: number) { return { background: `linear-gradient(135deg, ${AVATAR_COLORS[i % AVATAR_COLORS.length]}, ${AVATAR_COLORS[(i + 2) % AVATAR_COLORS.length]})` } }
 
 // ─── Component ─────────────────────────────────────────
-interface ApiProjectWithPhotos extends ApiProject {
-  photos: { url: string; id: string }[]
-}
+export default function DashboardPage() {
   const { currentUser, navigateTo, logout, mobileMenuOpen, setMobileMenuOpen, isManagerOrAdmin, selectProject } = useAppStore()
   const { toast } = useToast()
 
