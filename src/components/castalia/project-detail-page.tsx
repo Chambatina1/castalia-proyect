@@ -176,11 +176,17 @@ export default function ProjectDetailPage() {
   const renameSubProduct = async (id: string) => {
     if (!renameSubValue.trim()) return
     try {
-      await fetch('/api/subproducts', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, name: renameSubValue.trim() }) })
+      const res = await fetch('/api/subproducts', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, name: renameSubValue.trim() }) })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Error ${res.status}`)
+      }
       setSubProducts(prev => prev.map(s => s.id === id ? { ...s, name: renameSubValue.trim() } : s))
       setRenamingSubId(null)
       toast({ title: 'Categoría renombrada' })
-    } catch { toast({ title: 'Error', variant: 'destructive' }) }
+    } catch (err: any) {
+      toast({ title: 'Error al renombrar', description: err?.message || 'Intenta de nuevo', variant: 'destructive' })
+    }
   }
   const deleteSubProduct = async (id: string) => {
     try {
@@ -638,22 +644,22 @@ export default function ProjectDetailPage() {
                           <p className="text-[10px] text-white/70">{sub._count.photos} foto{sub._count.photos !== 1 ? 's' : ''}</p>
                         </div>
                       </div>
-                      {/* Hover actions */}
-                      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* Hover actions - always visible on mobile */}
+                      <div className="absolute top-2 right-2 flex gap-1">
                         <button onClick={(e) => { e.stopPropagation(); moveSubProduct(idx, -1) }} disabled={idx === 0}
-                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-white/90 shadow-sm disabled:opacity-20">
+                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-white/90 shadow-sm disabled:opacity-20 active:bg-gray-200">
                           <ChevronUp className="w-3.5 h-3.5" style={{ color: '#35414A' }} />
                         </button>
                         <button onClick={(e) => { e.stopPropagation(); moveSubProduct(idx, 1) }} disabled={idx === subProducts.length - 1}
-                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-white/90 shadow-sm disabled:opacity-20">
+                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-white/90 shadow-sm disabled:opacity-20 active:bg-gray-200">
                           <ChevronDown className="w-3.5 h-3.5" style={{ color: '#35414A' }} />
                         </button>
                         <button onClick={(e) => { e.stopPropagation(); setRenamingSubId(sub.id); setRenameSubValue(sub.name) }}
-                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-white/90 shadow-sm">
+                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-white/90 shadow-sm active:bg-[#38C5B5]/80">
                           <Pencil className="w-3.5 h-3.5" style={{ color: '#5D7380' }} />
                         </button>
                         <button onClick={(e) => { e.stopPropagation(); deleteSubProduct(sub.id) }}
-                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-red-500/90 shadow-sm">
+                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-red-500/90 shadow-sm active:bg-red-600">
                           <Trash2 className="w-3.5 h-3.5 text-white" />
                         </button>
                       </div>
