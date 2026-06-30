@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
         _count: { select: { members: true, photos: true, tasks: true, reports: true } },
         members: { include: { user: { select: { id: true, name: true, avatar: true } } } },
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: [{ sortOrder: 'asc' }, { updatedAt: 'desc' }],
     })
 
     return NextResponse.json(projects)

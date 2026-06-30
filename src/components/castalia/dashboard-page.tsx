@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Building2, Camera, CheckSquare, FileText, Plus, Upload, AlertTriangle, Search, Bell, LogOut, MapPin, Image, Clock, ArrowUpRight, X, LayoutDashboard, MessageSquare, FileBarChart, Users, Settings, ChevronRight, Menu, TrendingUp, FolderKanban, Trash2,
+  Building2, Camera, CheckSquare, FileText, Plus, Upload, AlertTriangle, Search, Bell, LogOut, MapPin, Image, Clock, ArrowUpRight, X, LayoutDashboard, MessageSquare, FileBarChart, Users, Settings, ChevronRight, Menu, TrendingUp, FolderKanban, Trash2, Pencil, Check, GripVertical, ArrowUp, ArrowDown, Save,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -58,11 +58,50 @@ export default function DashboardPage() {
   const [expandedStat, setExpandedStat] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ApiProject | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [renameTarget, setRenameTarget] = useState<ApiProject | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [renaming, setRenaming] = useState(false)
+  const [noteTarget, setNoteTarget] = useState<ApiProject | null>(null)
+  const [noteValue, setNoteValue] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
+  const [reorderMode, setReorderMode] = useState(false)
+  const [reorderProjects, setReorderProjects] = useState<ApiProject[]>([])
+  const [statReorderMode, setStatReorderMode] = useState(false)
+  const [statReorderProjects, setStatReorderProjects] = useState<ApiProject[]>([])
+
+  const startStatReorder = () => {
+    const active = projects.filter(p => p.status === 'ACTIVE')
+    setStatReorderProjects([...active])
+    setStatReorderMode(true)
+  }
+  const saveStatReorder = async () => {
+    try {
+      // Build items with sortOrder preserving positions of ALL projects (not just active ones)
+      const activeIds = new Set(statReorderProjects.map(p => p.id))
+      const nonActive = projects.filter(p => !activeIds.has(p.id))
+      const allOrdered = [...statReorderProjects, ...nonActive]
+      const items = allOrdered.map((p, i) => ({ id: p.id, sortOrder: i }))
+      await fetch('/api/projects/reorder', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) })
+      setProjects(prev => {
+        const map = new Map(prev.map(p => [p.id, p]))
+        return allOrdered.map(p => ({ ...map.get(p.id)!, sortOrder: allOrdered.indexOf(p) }))
+      })
+      setStatReorderMode(false)
+      toast({ title: 'Orden de proyectos actualizado' })
+    } catch { toast({ title: 'Error al guardar orden', variant: 'destructive' }) }
+  }
+  const moveStatProject = (idx: number, dir: -1 | 1) => {
+    const newIdx = idx + dir
+    if (newIdx < 0 || newIdx >= statReorderProjects.length) return
+    const arr = [...statReorderProjects]
+    ;[arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]]
+    setStatReorderProjects(arr)
+  }
 
   const loadData = useCallback(async () => {
     try {
       const [projRes, actRes] = await Promise.allSettled([
-        fetch('/api/projects').then(r => r.json()),
+        fetch('/api/projects/with-photos').then(r => r.json()),
         fetch('/api/activity?limit=10').then(r => r.json()),
       ])
       if (projRes.status === 'fulfilled' && Array.isArray(projRes.value)) setProjects(projRes.value)
@@ -82,7 +121,7 @@ export default function DashboardPage() {
     try {
       const res = await fetch(`/api/projects/${deleteTarget.id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error()
- toast({ title: 'Proyecto eliminado', description: deleteTarget.name })
+      toast({ title: 'Proyecto eliminado', description: deleteTarget.name })
       setProjects(prev => prev.filter(p => p.id !== deleteTarget.id))
     } catch {
       toast({ title: 'Error', description: 'No se pudo eliminar', variant: 'destructive' })
@@ -90,6 +129,66 @@ export default function DashboardPage() {
       setDeleting(false)
       setDeleteTarget(null)
     }
+  }
+
+  const openRename = (p: ApiProject) => { setRenameTarget(p); setRenameValue(p.name) }
+  const handleRename = async () => {
+    if (!renameTarget || !renameValue.trim()) return
+    setRenaming(true)
+    try {
+      const res = await fetch(`/api/projects/${renameTarget.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: renameValue.trim() }) })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `Server error ${res.status}`)
+      }
+      setProjects(prev => prev.map(p => p.id === renameTarget.id ? { ...p, name: renameValue.trim() } : p))
+      toast({ title: 'Proyecto renombrado' })
+      setRenameTarget(null)
+    } catch (err: any) {
+      toast({ title: 'Error al renombrar', description: err?.message || 'No se pudo guardar', variant: 'destructive' })
+    } finally { setRenaming(false) }
+  }
+
+  const openNote = async (p: ApiProject) => {
+    setNoteTarget(p)
+    try {
+      const res = await fetch(`/api/projects/${p.id}`)
+      const { project } = await res.json()
+      setNoteValue(project.description || '')
+    } catch { setNoteValue('') }
+  }
+  const handleSaveNote = async () => {
+    if (!noteTarget) return
+    setSavingNote(true)
+    try {
+      const res = await fetch(`/api/projects/${noteTarget.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ description: noteValue }) })
+      if (!res.ok) throw new Error(`Server returned ${res.status}`)
+      toast({ title: 'Nota guardada' })
+      setNoteTarget(null)
+    } catch {
+      toast({ title: 'Error al guardar nota', variant: 'destructive' })
+    } finally { setSavingNote(false) }
+  }
+
+  const startReorder = () => { setReorderMode(true); setReorderProjects([...filteredProjects]) }
+  const saveReorder = async () => {
+    try {
+      const items = reorderProjects.map((p, i) => ({ id: p.id, sortOrder: i }))
+      await fetch(`/api/projects/reorder`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) })
+      setProjects(prev => {
+        const map = new Map(prev.map(p => [p.id, p]))
+        return reorderProjects.map(rp => ({ ...map.get(rp.id)!, sortOrder: rp.sortOrder }))
+      })
+      setReorderMode(false)
+      toast({ title: 'Orden actualizado' })
+    } catch { toast({ title: 'Error', variant: 'destructive' }) }
+  }
+  const moveProject = (idx: number, dir: -1 | 1) => {
+    const newIdx = idx + dir
+    if (newIdx < 0 || newIdx >= reorderProjects.length) return
+    const arr = [...reorderProjects]
+    ;[arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]]
+    setReorderProjects(arr)
   }
 
   useEffect(() => {
@@ -224,7 +323,7 @@ export default function DashboardPage() {
         </header>
 
         {/* Content */}
-        <div className="flex-1 p-4 lg:p-8">
+        <div className="flex-1 p-4 pb-24 lg:pb-8 lg:p-8">
           {/* Welcome */}
           <div className="mb-8">
             <h2 className="text-[28px] lg:text-[32px] font-bold tracking-[-0.025em]" style={{ color: '#1A2332' }}>
@@ -259,21 +358,60 @@ export default function DashboardPage() {
                   <p className="text-[13px] font-medium mt-0.5" style={{ color: '#5D7380' }}>{stat.label}</p>
                   <AnimatePresence>
                     {expandedStat === stat.key && (
-                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'visible' }}>
                         <div className="pt-3 mt-3 border-t" style={{ borderColor: '#EDF0F4' }}>
                           {stat.key === 'active' && (
-                            <div className="space-y-2">
-                              {projects.filter(p => p.status === 'ACTIVE').slice(0, 5).map(p => (
-                                <div key={p.id} onClick={(e) => { e.stopPropagation(); navigateTo('project-detail', p.id); selectProject(p as any); }} className="flex items-center gap-2 p-2 rounded-lg hover:bg-black/5 cursor-pointer">
-                                  <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0"><img src={p.coverImage || ''} alt="" className="w-full h-full object-cover" /></div>
-                                  <p className="text-[12px] font-medium truncate" style={{ color: '#35414A' }}>{p.name}</p>
-                                </div>
-                              ))}
+                            <div className="max-h-[400px] overflow-y-auto -mx-1 px-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+                              {statReorderMode ? (
+                                <>
+                                  <div className="flex items-center justify-between mb-2 px-1">
+                                    <span className="text-[11px] font-semibold" style={{ color: '#115E59' }}>Modo reordenar</span>
+                                    <div className="flex gap-1">
+                                      <button onClick={(e) => { e.stopPropagation(); saveStatReorder() }} className="flex items-center gap-1 h-6 px-2 rounded-md text-[10px] font-semibold text-white" style={{ background: '#38C5B5' }}><Save className="w-3 h-3" />Guardar</button>
+                                      <button onClick={(e) => { e.stopPropagation(); setStatReorderMode(false) }} className="h-6 px-2 rounded-md text-[10px] font-semibold border" style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>Cancelar</button>
+                                    </div>
+                                  </div>
+                                  <div className="space-y-0.5">
+                                    {statReorderProjects.map((p, idx) => (
+                                      <div key={p.id} className="flex items-center gap-1 p-1.5 rounded-lg" style={{ background: idx === 0 ? 'rgba(56,197,181,0.06)' : 'transparent' }}>
+                                        <div className="flex flex-col gap-0.5 shrink-0">
+                                          <button onClick={(e) => { e.stopPropagation(); moveStatProject(idx, -1) }} disabled={idx === 0} className="w-5 h-5 flex items-center justify-center rounded hover:bg-black/10 disabled:opacity-20"><ArrowUp className="w-3 h-3" style={{ color: '#35414A' }} /></button>
+                                          <button onClick={(e) => { e.stopPropagation(); moveStatProject(idx, 1) }} disabled={idx === statReorderProjects.length - 1} className="w-5 h-5 flex items-center justify-center rounded hover:bg-black/10 disabled:opacity-20"><ArrowDown className="w-3 h-3" style={{ color: '#35414A' }} /></button>
+                                        </div>
+                                        <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 bg-gray-100"><img src={p.coverImage || ''} alt="" className="w-full h-full object-cover" /></div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-[11px] font-semibold truncate" style={{ color: '#35414A' }}>{p.name}</p>
+                                          <p className="text-[9px]" style={{ color: '#ADB5B7' }}>{p._count.photos} fotos</p>
+                                        </div>
+                                        <span className="text-[9px] font-mono shrink-0" style={{ color: '#ADB5B7' }}>#{idx + 1}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="flex justify-end mb-1.5 px-1">
+                                    <button onClick={(e) => { e.stopPropagation(); startStatReorder() }} className="flex items-center gap-1 h-6 px-2 rounded-md text-[10px] font-medium border" style={{ borderColor: '#E2E6EB', color: '#5D7380' }}><GripVertical className="w-3 h-3" />Reordenar</button>
+                                  </div>
+                                  <div className="space-y-1">
+                                    {projects.filter(p => p.status === 'ACTIVE').map(p => (
+                                      <div key={p.id} onClick={(e) => { e.stopPropagation(); navigateTo('project-detail', p.id); selectProject(p as any); }} className="flex items-center gap-2.5 p-2.5 rounded-lg hover:bg-black/5 active:bg-black/10 cursor-pointer">
+                                        <div className="w-9 h-9 rounded-lg overflow-hidden shrink-0 bg-gray-100"><img src={p.coverImage || ''} alt="" className="w-full h-full object-cover" /></div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-[12px] font-semibold truncate" style={{ color: '#35414A' }}>{p.name}</p>
+                                          <p className="text-[10px]" style={{ color: '#ADB5B7' }}>{p._count.photos} fotos</p>
+                                        </div>
+                                        <ChevronRight className="w-3.5 h-3.5 shrink-0" style={{ color: '#ADB5B7' }} />
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
                             </div>
                           )}
                           {stat.key === 'photos' && (
-                            <div className="space-y-2">
-                              {projects.filter(p => p._count.photos > 0).sort((a,b) => b._count.photos - a._count.photos).slice(0, 5).map(p => (
+                            <div className="max-h-[300px] overflow-y-auto space-y-1 -mx-1 px-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+                              {projects.filter(p => p._count.photos > 0).sort((a,b) => b._count.photos - a._count.photos).map(p => (
                                 <div key={p.id} onClick={(e) => { e.stopPropagation(); navigateTo('project-detail', p.id); selectProject(p as any); }} className="flex items-center justify-between p-2 rounded-lg hover:bg-black/5 cursor-pointer">
                                   <p className="text-[12px] font-medium truncate" style={{ color: '#35414A' }}>{p.name}</p>
                                   <span className="text-[11px] font-bold" style={{ color: stat.color }}>{p._count.photos}</span>
@@ -314,6 +452,17 @@ export default function DashboardPage() {
             </div>
           )}
 
+          {/* Reorder mode banner */}
+          {reorderMode && (
+            <div className="flex items-center justify-between p-3 rounded-xl mb-4" style={{ background: '#F0FDFA', border: '1px solid #99F6E4' }}>
+              <span className="text-[13px] font-semibold" style={{ color: '#115E59' }}>Modo reordenar — usa las flechas</span>
+              <div className="flex gap-2">
+                <button onClick={() => setReorderMode(false)} className="h-8 px-3 rounded-lg text-[12px] font-semibold border" style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>Cancelar</button>
+                <button onClick={saveReorder} className="h-8 px-4 rounded-lg text-[12px] font-bold text-white" style={{ background: '#38C5B5' }}>Guardar</button>
+              </div>
+            </div>
+          )}
+
           {/* Filters */}
           <div className="flex flex-wrap items-center gap-3 mb-6">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -343,22 +492,43 @@ export default function DashboardPage() {
             <span className="text-[13px] font-medium ml-auto" style={{ color: '#5D7380' }}>
               {filteredProjects.length} proyecto{filteredProjects.length !== 1 ? 's' : ''}
             </span>
+            <button onClick={reorderMode ? saveReorder : startReorder} className="h-8 px-3 rounded-lg text-[12px] font-semibold border flex items-center gap-1.5"
+              style={{ borderColor: reorderMode ? '#38C5B5' : '#E2E6EB', color: reorderMode ? '#38C5B5' : '#5D7380' }}>
+              <GripVertical className="w-3.5 h-3.5" />
+              {reorderMode ? 'Guardar' : 'Ordenar'}
+            </button>
           </div>
 
           {/* Projects Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
             <AnimatePresence mode="popLayout">
-              {filteredProjects.map((project, i) => (
+              {(reorderMode ? reorderProjects : filteredProjects).map((project, i) => (
                 <motion.div
                   key={project.id}
-                  initial={{ opacity: 0, y: 12 }}
+                  layout={reorderMode}
+                  initial={reorderMode ? false : { opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.25, delay: i * 0.04 }}
+                  transition={{ duration: 0.2, delay: reorderMode ? 0 : i * 0.04 }}
                 >
                   <div className="relative rounded-2xl overflow-hidden border bg-white hover:shadow-lg transition-all duration-300 group"
-                    style={{ borderColor: '#E8EBF0' }}>
-                    <div className="cursor-pointer" onClick={() => navigateTo('project-detail', project.id)}>
+                    style={{ borderColor: reorderMode ? '#38C5B5' : '#E8EBF0' }}>
+                    {/* Reorder arrows */}
+                    {reorderMode && (
+                      <div className="absolute top-1/2 -translate-y-1/2 -left-3 z-10 flex flex-col gap-1">
+                        <button onClick={() => moveProject(i, -1)} disabled={i === 0}
+                          className="h-7 w-7 rounded-full bg-white border shadow-sm flex items-center justify-center disabled:opacity-30"
+                          style={{ borderColor: '#E2E6EB' }}>
+                          <ChevronRight className="w-3.5 h-3.5 -rotate-90" style={{ color: '#35414A' }} />
+                        </button>
+                        <button onClick={() => moveProject(i, 1)} disabled={i === reorderProjects.length - 1}
+                          className="h-7 w-7 rounded-full bg-white border shadow-sm flex items-center justify-center disabled:opacity-30"
+                          style={{ borderColor: '#E2E6EB' }}>
+                          <ChevronRight className="w-3.5 h-3.5 rotate-90" style={{ color: '#35414A' }} />
+                        </button>
+                      </div>
+                    )}
+                    <div className={reorderMode ? 'cursor-grab' : ''} onClick={() => !reorderMode && navigateTo('project-detail', project.id)}>
                     {/* Cover */}
                     <div className="relative h-[160px] overflow-hidden"
                       style={{ background: project.coverImage ? undefined : `linear-gradient(135deg, #1A2332 0%, #2DA194 100%)` }}>
@@ -384,12 +554,23 @@ export default function DashboardPage() {
                           </span>
                         )}
                       </div>
-                      {/* Delete button - top right of cover */}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(project) }}
-                        className="absolute top-3 right-3 h-8 w-8 rounded-lg flex items-center justify-center sm:opacity-0 sm:group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-sm hover:!bg-red-500/80">
-                        <Trash2 className="w-3.5 h-3.5 text-white" />
-                      </button>
+                      {/* Action buttons - top right */}
+                      {!reorderMode && (
+                        <div className="absolute top-3 right-3 flex gap-1">
+                          <button onClick={(e) => { e.stopPropagation(); openRename(project) }}
+                            className="h-9 w-9 rounded-lg flex items-center justify-center bg-black/40 backdrop-blur-sm active:bg-[#38C5B5]/80 transition-colors">
+                            <Pencil className="w-3.5 h-3.5 text-white" />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); openNote(project) }}
+                            className="h-9 w-9 rounded-lg flex items-center justify-center bg-black/40 backdrop-blur-sm active:bg-[#F0A030]/80 transition-colors">
+                            <FileText className="w-3.5 h-3.5 text-white" />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); setDeleteTarget(project) }}
+                            className="h-9 w-9 rounded-lg flex items-center justify-center bg-black/40 backdrop-blur-sm active:bg-red-500/80 transition-colors">
+                            <Trash2 className="w-3.5 h-3.5 text-white" />
+                          </button>
+                        </div>
+                      )}
                       <div className="absolute bottom-3 right-3">
                         <span className="text-[12px] font-medium px-2 py-1 rounded-md bg-black/40 text-white backdrop-blur-sm">
                           {project.progress}%
@@ -571,6 +752,83 @@ export default function DashboardPage() {
       </Sheet>
 
       <CreateProjectModal open={showCreateProject} onClose={() => setShowCreateProject(false)} onCreated={() => loadData()} />
+
+      {/* Rename Modal */}
+      {renameTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setRenameTarget(null)} />
+          <div className="relative w-[340px] bg-white rounded-2xl overflow-hidden shadow-xl">
+            <div className="p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#F0FDFA' }}>
+                  <Pencil className="w-5 h-5" style={{ color: '#38C5B5' }} />
+                </div>
+                <h3 className="text-[17px] font-bold" style={{ color: '#1A2332' }}>Renombrar proyecto</h3>
+              </div>
+              <input
+                value={renameValue}
+                onChange={e => setRenameValue(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleRename()}
+                autoFocus
+                className="w-full h-11 text-[15px] rounded-xl border px-4 focus:outline-none focus:border-[#38C5B5]/40"
+                style={{ borderColor: '#E2E6EB', color: '#1A2332' }}
+                placeholder="Nombre del proyecto"
+              />
+            </div>
+            <div className="flex border-t" style={{ borderColor: '#E8EBF0' }}>
+              <button onClick={() => setRenameTarget(null)} disabled={renaming}
+                className="flex-1 h-12 text-[14px] font-semibold border-r" style={{ color: '#5D7380', borderColor: '#E8EBF0' }}>
+                Cancelar
+              </button>
+              <button onClick={handleRename} disabled={renaming || !renameValue.trim()}
+                className="flex-1 h-12 text-[14px] font-semibold text-white flex items-center justify-center gap-2 disabled:opacity-50"
+                style={{ background: '#38C5B5' }}>
+                {renaming ? <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Check className="w-4 h-4" />}
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Note Modal */}
+      {noteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setNoteTarget(null)} />
+          <div className="relative w-[340px] bg-white rounded-2xl overflow-hidden shadow-xl">
+            <div className="p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#FFF7ED' }}>
+                  <FileText className="w-5 h-5" style={{ color: '#F0A030' }} />
+                </div>
+                <h3 className="text-[17px] font-bold" style={{ color: '#1A2332' }}>Notas</h3>
+                <span className="text-[12px] font-medium ml-auto" style={{ color: '#ADB5B7' }}>{noteTarget.name}</span>
+              </div>
+              <textarea
+                value={noteValue}
+                onChange={e => setNoteValue(e.target.value)}
+                autoFocus
+                rows={5}
+                className="w-full text-[14px] rounded-xl border px-4 py-3 resize-none focus:outline-none focus:border-[#F0A030]/40"
+                style={{ borderColor: '#E2E6EB', color: '#1A2332' }}
+                placeholder="Escribe notas, indicaciones, observaciones..."
+              />
+            </div>
+            <div className="flex border-t" style={{ borderColor: '#E8EBF0' }}>
+              <button onClick={() => setNoteTarget(null)} disabled={savingNote}
+                className="flex-1 h-12 text-[14px] font-semibold border-r" style={{ color: '#5D7380', borderColor: '#E8EBF0' }}>
+                Cancelar
+              </button>
+              <button onClick={handleSaveNote} disabled={savingNote}
+                className="flex-1 h-12 text-[14px] font-semibold text-white flex items-center justify-center gap-2 disabled:opacity-50"
+                style={{ background: '#F0A030' }}>
+                {savingNote ? <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Check className="w-4 h-4" />}
+                Guardar nota
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {deleteTarget && (

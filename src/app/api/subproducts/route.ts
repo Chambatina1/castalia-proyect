@@ -1,100 +1,87 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-// GET /api/subproducts?projectId=xxx — List subproducts for a project
-export async function GET(request: NextRequest) {
+// GET /api/subproducts?projectId=xxx
+export async function GET(req: NextRequest) {
   try {
-    const projectId = new URL(request.url).searchParams.get('projectId')
+    const projectId = req.nextUrl.searchParams.get('projectId')
     if (!projectId) return NextResponse.json({ error: 'projectId requerido' }, { status: 400 })
 
     const subProducts = await db.subProduct.findMany({
       where: { projectId },
-      orderBy: { sortOrder: 'asc' },
-      include: {
-        _count: { select: { photos: true } },
-      },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      include: { _count: { select: { photos: true } } },
     })
-
     return NextResponse.json({ subProducts })
   } catch (error) {
     console.error('SubProducts GET error:', error)
-    return NextResponse.json({ error: 'Error del servidor' }, { status: 500 })
+    return NextResponse.json({ error: String(error) }, { status: 500 })
   }
 }
 
-// POST /api/subproducts — Create a new subproduct (category)
-export async function POST(request: NextRequest) {
+// POST /api/subproducts
+export async function POST(req: NextRequest) {
   try {
-    const body = await request.json()
-    const { projectId, name } = body
+    const { projectId, name, sortOrder } = await req.json()
+    if (!projectId || !name?.trim()) return NextResponse.json({ error: 'projectId y nombre requeridos' }, { status: 400 })
 
-    if (!projectId || !name?.trim()) {
-      return NextResponse.json({ error: 'projectId y name son requeridos' }, { status: 400 })
-    }
+    const existing = await db.subProduct.findFirst({ where: { projectId, name: name.trim() } })
+    if (existing) return NextResponse.json({ error: 'Ya existe un subproducto con ese nombre' }, { status: 409 })
 
-    // Get next sortOrder
-    const maxSort = await db.subProduct.findFirst({
-      where: { projectId },
-      orderBy: { sortOrder: 'desc' },
-      select: { sortOrder: true },
+    const count = await db.subProduct.count({ where: { projectId } })
+    const sub = await db.subProduct.create({
+      data: { projectId, name: name.trim(), sortOrder: sortOrder ?? count },
     })
-
-    const subProduct = await db.subProduct.create({
-      data: {
-        name: name.trim(),
-        projectId,
-        sortOrder: (maxSort?.sortOrder ?? -1) + 1,
-      },
-      include: { _count: { select: { photos: true } } },
-    })
-
-    return NextResponse.json({ subProduct }, { status: 201 })
+    return NextResponse.json({ subProduct: sub }, { status: 201 })
   } catch (error) {
     console.error('SubProducts POST error:', error)
-    return NextResponse.json({ error: 'Error al crear categoría' }, { status: 500 })
+    return NextResponse.json({ error: String(error) }, { status: 500 })
   }
 }
 
-// PATCH /api/subproducts — Rename a subproduct
-export async function PATCH(request: NextRequest) {
+// PATCH /api/subproducts (rename + reorder)
+export async function PATCH(req: NextRequest) {
   try {
-    const body = await request.json()
+    const body = await req.json()
+
+    // Batch reorder
+    if (body.items && Array.isArray(body.items)) {
+      await Promise.all(
+        body.items.map(({ id, sortOrder, name }: { id: string; sortOrder?: number; name?: string }) =>
+          db.subProduct.update({ where: { id }, data: { ...(sortOrder !== undefined && { sortOrder }), ...(name && { name: name.trim() }) } })
+        )
+      )
+      return NextResponse.json({ ok: true })
+    }
+
+    // Single update
     const { id, name } = body
-
-    if (!id || !name?.trim()) {
-      return NextResponse.json({ error: 'id y name son requeridos' }, { status: 400 })
+    if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
+    if (name?.trim()) {
+      const sub = await db.subProduct.update({ where: { id }, data: { name: name.trim() } })
+      return NextResponse.json({ subProduct: sub })
     }
-
-    const subProduct = await db.subProduct.update({
-      where: { id },
-      data: { name: name.trim() },
-      include: { _count: { select: { photos: true } } },
-    })
-
-    return NextResponse.json({ subProduct })
-  } catch (error: any) {
+    return NextResponse.json({ error: 'nada que actualizar' }, { status: 400 })
+  } catch (error) {
     console.error('SubProducts PATCH error:', error)
-    if (error.code === 'P2025') {
-      return NextResponse.json({ error: 'Categoría no encontrada' }, { status: 404 })
+    const msg = String(error)
+    if (msg.includes('Unique')) {
+      return NextResponse.json({ error: 'Ya existe una categoría con ese nombre en este proyecto' }, { status: 409 })
     }
-    return NextResponse.json({ error: 'Error al renombrar' }, { status: 500 })
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
 
-// DELETE /api/subproducts?id=xxx — Delete a subproduct
-export async function DELETE(request: NextRequest) {
+// DELETE /api/subproducts?id=xxx
+export async function DELETE(req: NextRequest) {
   try {
-    const id = new URL(request.url).searchParams.get('id')
+    const id = req.nextUrl.searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
 
     await db.subProduct.delete({ where: { id } })
-
-    return NextResponse.json({ success: true })
-  } catch (error: any) {
+    return NextResponse.json({ ok: true })
+  } catch (error) {
     console.error('SubProducts DELETE error:', error)
-    if (error.code === 'P2025') {
-      return NextResponse.json({ error: 'Categoría no encontrada' }, { status: 404 })
-    }
-    return NextResponse.json({ error: 'Error al eliminar' }, { status: 500 })
+    return NextResponse.json({ error: String(error) }, { status: 500 })
   }
 }

@@ -47,6 +47,21 @@ model User {
   @@index([email])
 }
 
+model SubProduct {
+  id          String   @id @default(cuid())
+  name        String
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  photos      Photo[]
+
+  @@index([projectId])
+  @@unique([projectId, name])
+}
+
 model Project {
   id              String    @id @default(cuid())
   name            String
@@ -66,6 +81,7 @@ model Project {
   completedAt     DateTime?
   progress        Int       @default(0) // 0-100
   coverImage      String?
+  sortOrder       Int       @default(0)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -120,18 +136,19 @@ model Photo {
   tags          String    @default("") // comma-separated: before,during,after,problem,...
   caption       String?
   annotations   String?   // JSON string for annotations data
+  subProductId  String?
+  subProduct    SubProduct? @relation(fields: [subProductId], references: [id], onDelete: SetNull)
   isApproved    Boolean   @default(false)
   isVisibleToClient Boolean @default(false)
   isUrgent      Boolean   @default(false)
-  subProductId  String?
-  subProduct    SubProduct?  @relation(fields: [subProductId], references: [id], onDelete: SetNull)
+  sortOrder     Int       @default(0)
   createdAt     DateTime  @default(now())
 
   @@index([projectId])
+  @@index([subProductId])
   @@index([uploadedBy])
   @@index([isApproved])
   @@index([isVisibleToClient])
-  @@index([subProductId])
 }
 
 model Task {
@@ -247,20 +264,6 @@ model ClientShare {
 
   @@index([projectId])
   @@index([token])
-}
-
-model SubProduct {
-  id          String    @id @default(cuid())
-  name        String
-  projectId   String
-  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  sortOrder   Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  photos      Photo[]
-
-  @@index([projectId])
 }
 
 model Notification {

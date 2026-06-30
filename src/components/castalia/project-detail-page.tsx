@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, MapPin, Calendar, Image, CheckSquare, MessageSquare, FileText, Clock, Camera, X, ChevronLeft, ChevronRight, Pencil, Trash2, Eraser, Download, Share2, Copy, CheckCircle, ImagePlus, Link2, Folder, FolderOpen, Plus } from 'lucide-react'
+import { ArrowLeft, MapPin, Calendar, Image, CheckSquare, MessageSquare, FileText, Clock, Camera, X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Pencil, Trash2, Eraser, Download, Share2, Copy, CheckCircle, ImagePlus, Link2, GripVertical, Save, StickyNote, Plus, FolderOpen, Folder, ChevronRight as ChevronRightIcon, Cloud, Loader2 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ interface ApiPhoto {
   id: string; url: string; thumbnailUrl?: string; caption?: string; tags?: string
   uploadedBy: { id: string; name: string; avatar?: string }
   isApproved: boolean; isVisibleToClient: boolean; isUrgent: boolean; createdAt: string
+  subProductId?: string | null
 }
 interface ApiTask {
   id: string; title: string; status: string; priority: string
@@ -22,6 +23,9 @@ interface ApiTask {
 }
 interface ApiActivity {
   id: string; action: string; user: { id: string; name: string }; details?: string; createdAt: string
+}
+interface SubProduct {
+  id: string; name: string; sortOrder: number; _count: { photos: number }
 }
 
 export default function ProjectDetailPage() {
@@ -62,13 +66,55 @@ export default function ProjectDetailPage() {
   const [shareLink, setShareLink] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
-  // SubProducts (categories)
-  const [subProducts, setSubProducts] = useState<any[]>([])
+  // Notes
+  const [showNoteEditor, setShowNoteEditor] = useState(false)
+  const [projectNote, setProjectNote] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
+
+  // Photo note (modal)
+  const [notePhotoId, setNotePhotoId] = useState<string | null>(null)
+  const [notePhotoText, setNotePhotoText] = useState('')
+
+  // Inline note editing
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [editingNoteText, setEditingNoteText] = useState('')
+
+  // Reorder photos
+  const [reorderMode, setReorderMode] = useState(false)
+  const [localPhotos, setLocalPhotos] = useState<ApiPhoto[]>([])
+
+  // SubProducts
+  const [subProducts, setSubProducts] = useState<SubProduct[]>([])
   const [selectedSubId, setSelectedSubId] = useState<string | null>(null)
   const [newSubName, setNewSubName] = useState('')
   const [showNewSub, setShowNewSub] = useState(false)
   const [renamingSubId, setRenamingSubId] = useState<string | null>(null)
   const [renameSubValue, setRenameSubValue] = useState('')
+  const [assigningSubPhotoId, setAssigningSubPhotoId] = useState<string | null>(null)
+
+  // Dropbox sync
+  const [dropboxSyncing, setDropboxSyncing] = useState(false)
+  const syncToDropbox = async () => {
+    if (!selectedProjectId) return
+    setDropboxSyncing(true)
+    try {
+      const res = await fetch('/api/dropbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'sync-project', projectId: selectedProjectId }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        toast({ title: 'Sincronizado a Dropbox', description: data.message })
+      } else {
+        toast({ title: data.error || 'Error al sincronizar', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error de conexión con Dropbox', variant: 'destructive' })
+    } finally {
+      setDropboxSyncing(false)
+    }
+  }
 
   const getTags = (p: ApiPhoto) => { try { return JSON.parse(p.tags || '[]') } catch { return (p.tags || '').split(',').filter(Boolean) } }
   const getPhase = (p: ApiPhoto) => { const t = getTags(p); return t.includes('antes') ? 'antes' : t.includes('despues') ? 'despues' : null }
@@ -80,9 +126,11 @@ export default function ProjectDetailPage() {
 
   const filteredPhotos = useMemo(() => {
     let result = photos
+    // If inside a subproduct, only show its photos
     if (selectedSubId) {
       result = result.filter(p => p.subProductId === selectedSubId)
     }
+    // Tag filter (ANTES/DESPUÉS) only applies within subproduct or when no sub selected
     if (!selectedSubId) {
       if (tagFilter === 'antes') result = beforePhotos
       else if (tagFilter === 'despues') result = afterPhotos
@@ -91,10 +139,20 @@ export default function ProjectDetailPage() {
     return result
   }, [photos, tagFilter, selectedSubId, beforePhotos, afterPhotos])
 
+  const selectedSub = subProducts.find(s => s.id === selectedSubId) || null
+  // Get cover photo for each subproduct
+  const subCoverMap = useMemo(() => {
+    const map = new Map<string, ApiPhoto>()
+    for (const p of photos) {
+      if (p.subProductId && !map.has(p.subProductId)) map.set(p.subProductId, p)
+    }
+    return map
+  }, [photos])
+
   const loadPhotos = useCallback(async () => {
     if (!selectedProjectId) return
     const phRes = await fetch(`/api/photos?projectId=${selectedProjectId}`).then(r => r.json())
-    if (Array.isArray(phRes?.photos)) setPhotos(phRes.photos.map((p: any) => ({ ...p, uploadedBy: p.uploader })))
+    if (Array.isArray(phRes?.photos)) setPhotos(phRes.photos.map((p: any) => ({ ...p, uploadedBy: p.uploader, subProductId: p.subProductId })))
   }, [selectedProjectId])
 
   const loadSubProducts = useCallback(async () => {
@@ -103,6 +161,7 @@ export default function ProjectDetailPage() {
     if (Array.isArray(res?.subProducts)) setSubProducts(res.subProducts)
   }, [selectedProjectId])
 
+  // ─── SubProduct CRUD ───
   const createSubProduct = async () => {
     if (!selectedProjectId || !newSubName.trim()) return
     try {
@@ -118,11 +177,16 @@ export default function ProjectDetailPage() {
     if (!renameSubValue.trim()) return
     try {
       const res = await fetch('/api/subproducts', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, name: renameSubValue.trim() }) })
-      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `Error ${res.status}`) }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `Error ${res.status}`)
+      }
       setSubProducts(prev => prev.map(s => s.id === id ? { ...s, name: renameSubValue.trim() } : s))
       setRenamingSubId(null)
       toast({ title: 'Categoría renombrada' })
-    } catch (err: any) { toast({ title: 'Error al renombrar', description: err?.message || 'Intenta de nuevo', variant: 'destructive' }) }
+    } catch (err: any) {
+      toast({ title: 'Error al renombrar', description: err?.message || 'Intenta de nuevo', variant: 'destructive' })
+    }
   }
   const deleteSubProduct = async (id: string) => {
     try {
@@ -132,23 +196,46 @@ export default function ProjectDetailPage() {
       toast({ title: 'Categoría eliminada' })
     } catch { toast({ title: 'Error', variant: 'destructive' }) }
   }
+  const moveSubProduct = async (idx: number, dir: -1 | 1) => {
+    const newIdx = idx + dir
+    if (newIdx < 0 || newIdx >= subProducts.length) return
+    const arr = [...subProducts]
+    ;[arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]]
+    setSubProducts(arr)
+    try {
+      await fetch('/api/subproducts', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items: arr.map((s, i) => ({ id: s.id, sortOrder: i })) }) })
+    } catch { toast({ title: 'Error al reordenar', variant: 'destructive' }) }
+  }
+  const assignPhotoToSub = async (photoId: string, subProductId: string | null) => {
+    try {
+      await fetch(`/api/photos/${photoId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subProductId }) })
+      setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, subProductId } : p))
+      setAssigningSubPhotoId(null)
+      // Refresh subproduct counts
+      loadSubProducts()
+      toast({ title: subProductId ? 'Foto asignada' : 'Foto desasignada' })
+    } catch { toast({ title: 'Error', variant: 'destructive' }) }
+  }
 
   useEffect(() => {
     if (!selectedProjectId) return
     setLoading(true)
+    setSelectedSubId(null)
+    setTagFilter('ALL')
     Promise.allSettled([
       fetch(`/api/projects/${selectedProjectId}`).then(r => r.json()),
       fetch(`/api/photos?projectId=${selectedProjectId}`).then(r => r.json()),
       fetch(`/api/tasks?projectId=${selectedProjectId}`).then(r => r.json()),
       fetch(`/api/activity?projectId=${selectedProjectId}&limit=20`).then(r => r.json()),
-    ]).then(([pRes, phRes, tRes, aRes]) => {
+      fetch(`/api/subproducts?projectId=${selectedProjectId}`).then(r => r.json()),
+    ]).then(([pRes, phRes, tRes, aRes, sRes]) => {
       if (pRes.status === 'fulfilled' && pRes.value?.project?.id) setProject(pRes.value.project)
       if (phRes.status === 'fulfilled' && Array.isArray(phRes.value?.photos)) {
-        setPhotos(phRes.value.photos.map((p: any) => ({ ...p, uploadedBy: p.uploader })))
+        setPhotos(phRes.value.photos.map((p: any) => ({ ...p, uploadedBy: p.uploader, subProductId: p.subProductId })))
       }
       if (tRes.status === 'fulfilled' && Array.isArray(tRes.value)) setTasks(tRes.value)
       if (aRes.status === 'fulfilled' && Array.isArray(aRes.value)) setActivity(aRes.value)
-      loadSubProducts()
+      if (sRes.status === 'fulfilled' && Array.isArray(sRes.value?.subProducts)) setSubProducts(sRes.value.subProducts)
       setLoading(false)
     })
   }, [selectedProjectId])
@@ -185,11 +272,13 @@ export default function ProjectDetailPage() {
       fd.append('uploadedBy', currentUser?.id || '')
       fd.append('fase', fase)
       fd.append('tags', JSON.stringify([fase]))
+      if (selectedSubId) fd.append('subProductId', selectedSubId)
 
       const res = await fetch('/api/photos', { method: 'POST', body: fd })
       if (!res.ok) throw new Error()
       toast({ title: `${files.length} foto(s) subida(s)`, description: fase === 'antes' ? 'ANTES' : 'DESPUÉS' })
       await loadPhotos()
+      await loadSubProducts()
     } catch {
       toast({ title: 'Error al subir fotos', variant: 'destructive' })
     } finally {
@@ -257,6 +346,66 @@ export default function ProjectDetailPage() {
     } catch {
       toast({ title: 'Error al generar link', variant: 'destructive' })
     }
+  }
+
+  // ─── Project Note ───
+  const openNoteEditor = () => { setProjectNote(project?.description || ''); setShowNoteEditor(true) }
+  const saveProjectNote = async () => {
+    if (!selectedProjectId) return
+    setSavingNote(true)
+    try {
+      await fetch(`/api/projects/${selectedProjectId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ description: projectNote }) })
+      setProject(prev => ({ ...prev, description: projectNote }))
+      setShowNoteEditor(false)
+      toast({ title: 'Nota guardada' })
+    } catch { toast({ title: 'Error', variant: 'destructive' }) }
+    finally { setSavingNote(false) }
+  }
+
+  // ─── Photo Note ───
+  const openPhotoNote = (photo: ApiPhoto) => { setNotePhotoId(photo.id); setNotePhotoText(photo.caption || '') }
+  const savePhotoNote = async () => {
+    if (!notePhotoId) return
+    try {
+      await fetch(`/api/photos/${notePhotoId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: notePhotoText }) })
+      setPhotos(prev => prev.map(p => p.id === notePhotoId ? { ...p, caption: notePhotoText } : p))
+      setNotePhotoId(null)
+      toast({ title: 'Nota de foto guardada' })
+    } catch { toast({ title: 'Error', variant: 'destructive' }) }
+  }
+
+  // ─── Inline Note Save ───
+  const saveInlineNote = async (photoId: string, text: string) => {
+    if (!photoId) return
+    const trimmed = text.trim()
+    try {
+      await fetch(`/api/photos/${photoId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ caption: trimmed || null }) })
+      setPhotos(prev => prev.map(p => p.id === photoId ? { ...p, caption: trimmed || '' } : p))
+      setEditingNoteId(null)
+      if (trimmed) toast({ title: 'Nota guardada' })
+    } catch { toast({ title: 'Error al guardar nota', variant: 'destructive' }) }
+  }
+
+  // ─── Reorder Photos ───
+  const startReorder = () => { setReorderMode(true); setLocalPhotos([...filteredPhotos]) }
+  const savePhotoOrder = async () => {
+    try {
+      const items = localPhotos.map((p, i) => ({ id: p.id, sortOrder: i }))
+      await fetch('/api/photos/reorder', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) })
+      setPhotos(prev => {
+        const map = new Map(prev.map(p => [p.id, p]))
+        return localPhotos.map(lp => ({ ...map.get(lp.id)! }))
+      })
+      setReorderMode(false)
+      toast({ title: 'Orden guardado' })
+    } catch { toast({ title: 'Error', variant: 'destructive' }) }
+  }
+  const movePhoto = (idx: number, dir: -1 | 1) => {
+    const arr = [...localPhotos]
+    const newIdx = idx + dir
+    if (newIdx < 0 || newIdx >= arr.length) return
+    ;[arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]]
+    setLocalPhotos(arr)
   }
 
   // ─── Draw handlers ───
@@ -344,6 +493,16 @@ export default function ProjectDetailPage() {
             <Share2 className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Compartir</span>
           </button>
+          <button onClick={syncToDropbox} disabled={dropboxSyncing} className="h-9 px-3 rounded-lg border flex items-center gap-1.5 text-[12px] font-semibold shrink-0 disabled:opacity-50"
+            style={{ borderColor: '#E2E6EB', color: '#0061FF' }}>
+            {dropboxSyncing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Cloud className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">Dropbox</span>
+          </button>
+          <button onClick={openNoteEditor} className="h-9 px-3 rounded-lg border flex items-center gap-1.5 text-[12px] font-semibold shrink-0"
+            style={{ borderColor: '#E2E6EB', color: '#F0A030' }}>
+            <StickyNote className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Nota</span>
+          </button>
         </div>
       </div>
 
@@ -378,50 +537,200 @@ export default function ProjectDetailPage() {
           </div>
         </div>
 
-        {/* Quick Phase Upload Buttons */}
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <button onClick={() => { setPendingPhase('antes'); cameraRef.current?.click() }} disabled={uploading}
-            className="rounded-2xl p-4 text-center border-2 transition-all disabled:opacity-50 active:scale-[0.97]"
-            style={{ borderColor: '#F0A030', background: 'linear-gradient(135deg, #FFF7ED, #FFEDD5)' }}>
-            <div className="flex items-center justify-center gap-2 mb-0.5">
-              <Camera className="w-5 h-5" style={{ color: '#F0A030' }} />
-              <span className="text-[15px] font-bold" style={{ color: '#92400E' }}>ANTES</span>
-            </div>
-            <p className="text-[11px]" style={{ color: '#B45309' }}>Tomar foto o elegir de galería</p>
-          </button>
-
-          <button onClick={() => { setPendingPhase('despues'); cameraRef.current?.click() }} disabled={uploading}
-            className="rounded-2xl p-4 text-center border-2 transition-all disabled:opacity-50 active:scale-[0.97]"
-            style={{ borderColor: '#2DA194', background: 'linear-gradient(135deg, #F0FDFA, #CCFBF1)' }}>
-            <div className="flex items-center justify-center gap-2 mb-0.5">
-              <Camera className="w-5 h-5" style={{ color: '#2DA194' }} />
-              <span className="text-[15px] font-bold" style={{ color: '#115E59' }}>DESPUÉS</span>
-            </div>
-            <p className="text-[11px]" style={{ color: '#0F766E' }}>Tomar foto o elegir de galería</p>
-          </button>
-        </div>
-
-        {/* Gallery upload buttons (secondary) */}
-        <div className="flex gap-2 mb-6">
-          <button onClick={() => { setPendingPhase('antes'); galleryRef.current?.click() }} disabled={uploading}
-            className="flex-1 h-9 rounded-lg text-[12px] font-semibold border flex items-center justify-center gap-1.5 disabled:opacity-50"
-            style={{ borderColor: '#F0A030', color: '#92400E', background: '#FFFBF5' }}>
-            <ImagePlus className="w-3.5 h-3.5" /> Galería ANTES
-          </button>
-          <button onClick={() => { setPendingPhase('despues'); galleryRef.current?.click() }} disabled={uploading}
-            className="flex-1 h-9 rounded-lg text-[12px] font-semibold border flex items-center justify-center gap-1.5 disabled:opacity-50"
-            style={{ borderColor: '#2DA194', color: '#115E59', background: '#F7FDFC' }}>
-            <ImagePlus className="w-3.5 h-3.5" /> Galería DESPUÉS
-          </button>
-          {selectMode && (
-            <button onClick={selectedIds.size > 0 ? downloadSelected : () => { setSelectMode(false); setSelectedIds(new Set()) }}
-              className="h-9 px-4 rounded-lg text-[12px] font-bold text-white flex items-center gap-1.5 shrink-0"
-              style={{ background: selectedIds.size > 0 ? '#38C5B5' : '#6B7280' }}>
-              <Download className="w-3.5 h-3.5" />
-              {selectedIds.size > 0 ? `Descargar ${selectedIds.size}` : 'Cancelar'}
+        {/* Quick Phase Upload Buttons — only inside a category */}
+        {selectedSubId && (
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            <button onClick={() => { setPendingPhase('antes'); cameraRef.current?.click() }} disabled={uploading}
+              className="rounded-2xl p-4 text-center border-2 transition-all disabled:opacity-50 active:scale-[0.97]"
+              style={{ borderColor: '#F0A030', background: 'linear-gradient(135deg, #FFF7ED, #FFEDD5)' }}>
+              <div className="flex items-center justify-center gap-2 mb-0.5">
+                <Camera className="w-5 h-5" style={{ color: '#F0A030' }} />
+                <span className="text-[15px] font-bold" style={{ color: '#92400E' }}>ANTES</span>
+              </div>
+              <p className="text-[11px]" style={{ color: '#B45309' }}>Tomar foto o elegir de galería</p>
             </button>
-          )}
-        </div>
+            <button onClick={() => { setPendingPhase('despues'); cameraRef.current?.click() }} disabled={uploading}
+              className="rounded-2xl p-4 text-center border-2 transition-all disabled:opacity-50 active:scale-[0.97]"
+              style={{ borderColor: '#2DA194', background: 'linear-gradient(135deg, #F0FDFA, #CCFBF1)' }}>
+              <div className="flex items-center justify-center gap-2 mb-0.5">
+                <Camera className="w-5 h-5" style={{ color: '#2DA194' }} />
+                <span className="text-[15px] font-bold" style={{ color: '#115E59' }}>DESPUÉS</span>
+              </div>
+              <p className="text-[11px]" style={{ color: '#0F766E' }}>Tomar foto o elegir de galería</p>
+            </button>
+          </div>
+        )}
+
+        {/* Gallery upload buttons — only inside a category */}
+        {selectedSubId && (
+          <div className="flex gap-2 mb-4">
+            <button onClick={() => { setPendingPhase('antes'); galleryRef.current?.click() }} disabled={uploading}
+              className="flex-1 h-9 rounded-lg text-[12px] font-semibold border flex items-center justify-center gap-1.5 disabled:opacity-50"
+              style={{ borderColor: '#F0A030', color: '#92400E', background: '#FFFBF5' }}>
+              <ImagePlus className="w-3.5 h-3.5" /> Galería ANTES
+            </button>
+            <button onClick={() => { setPendingPhase('despues'); galleryRef.current?.click() }} disabled={uploading}
+              className="flex-1 h-9 rounded-lg text-[12px] font-semibold border flex items-center justify-center gap-1.5 disabled:opacity-50"
+              style={{ borderColor: '#2DA194', color: '#115E59', background: '#F7FDFC' }}>
+              <ImagePlus className="w-3.5 h-3.5" /> Galería DESPUÉS
+            </button>
+            {selectMode && (
+              <button onClick={selectedIds.size > 0 ? downloadSelected : () => { setSelectMode(false); setSelectedIds(new Set()) }}
+                className="h-9 px-4 rounded-lg text-[12px] font-bold text-white flex items-center gap-1.5 shrink-0"
+                style={{ background: selectedIds.size > 0 ? '#38C5B5' : '#6B7280' }}>
+                <Download className="w-3.5 h-3.5" />
+                {selectedIds.size > 0 ? `Descargar ${selectedIds.size}` : 'Cancelar'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* ═══ CATEGORY FOLDERS VIEW (when no category selected) ═══ */}
+        {!selectedSubId && (
+          <div className="mb-6">
+            {/* Header with New Category button */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <FolderOpen className="w-5 h-5" style={{ color: '#38C5B5' }} />
+                <h2 className="text-[18px] font-bold" style={{ color: '#1A2332' }}>Categorías</h2>
+                <span className="text-[11px] px-2 py-0.5 rounded-lg font-bold" style={{ background: '#F0FDFA', color: '#38C5B5' }}>{subProducts.length}</span>
+              </div>
+              <button onClick={() => setShowNewSub(!showNewSub)} className="flex items-center gap-1.5 h-9 px-4 rounded-xl text-[12px] font-bold text-white"
+                style={{ background: '#38C5B5' }}>
+                <Plus className="w-4 h-4" /> Nueva categoría
+              </button>
+            </div>
+
+            {/* New category input */}
+            <AnimatePresence>
+              {showNewSub && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mb-4">
+                  <div className="flex gap-2 p-4 rounded-xl border" style={{ borderColor: '#99F6E4', background: '#F0FDFA' }}>
+                    <input value={newSubName} onChange={e => setNewSubName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') createSubProduct(); if (e.key === 'Escape') setShowNewSub(false) }}
+                      placeholder="Nombre de la categoría..."
+                      className="flex-1 h-10 px-4 rounded-lg border text-[14px] focus:outline-none"
+                      style={{ borderColor: '#99F6E4', color: '#1A2332', background: 'white' }} autoFocus />
+                    <button onClick={createSubProduct} disabled={!newSubName.trim()}
+                      className="h-10 px-5 rounded-lg text-[13px] font-bold text-white disabled:opacity-40"
+                      style={{ background: '#2DA194' }}>Crear</button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Category folder grid */}
+            {subProducts.length > 0 ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {subProducts.map((sub, idx) => {
+                  const cover = subCoverMap.get(sub.id)
+                  return (
+                    <motion.div key={sub.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.03 }}
+                      className="relative group rounded-xl overflow-hidden border bg-white cursor-pointer active:scale-[0.98] transition-transform"
+                      style={{ borderColor: '#E8EBF0' }}>
+                      {/* Folder cover image */}
+                      <div className="aspect-[4/3] overflow-hidden relative" onClick={() => { setSelectedSubId(sub.id); setTagFilter('ALL'); setReorderMode(false); setSelectMode(false); setSelectedIds(new Set()) }}>
+                        {cover ? (
+                          <img src={cover.thumbnailUrl || cover.url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #F0FDFA, #CCFBF1)' }}>
+                            <Folder className="w-12 h-12" style={{ color: '#99F6E4' }} />
+                          </div>
+                        )}
+                        {/* Gradient overlay */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                        {/* Name + count at bottom */}
+                        <div className="absolute bottom-0 left-0 right-0 p-3">
+                          <p className="text-[13px] font-bold text-white truncate">{sub.name}</p>
+                          <p className="text-[10px] text-white/70">{sub._count.photos} foto{sub._count.photos !== 1 ? 's' : ''}</p>
+                        </div>
+                      </div>
+                      {/* Hover actions - always visible on mobile */}
+                      <div className="absolute top-2 right-2 flex gap-1">
+                        <button onClick={(e) => { e.stopPropagation(); moveSubProduct(idx, -1) }} disabled={idx === 0}
+                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-white/90 shadow-sm disabled:opacity-20 active:bg-gray-200">
+                          <ChevronUp className="w-3.5 h-3.5" style={{ color: '#35414A' }} />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); moveSubProduct(idx, 1) }} disabled={idx === subProducts.length - 1}
+                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-white/90 shadow-sm disabled:opacity-20 active:bg-gray-200">
+                          <ChevronDown className="w-3.5 h-3.5" style={{ color: '#35414A' }} />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); setRenamingSubId(sub.id); setRenameSubValue(sub.name) }}
+                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-white/90 shadow-sm active:bg-[#38C5B5]/80">
+                          <Pencil className="w-3.5 h-3.5" style={{ color: '#5D7380' }} />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); deleteSubProduct(sub.id) }}
+                          className="h-7 w-7 rounded-lg flex items-center justify-center bg-red-500/90 shadow-sm active:bg-red-600">
+                          <Trash2 className="w-3.5 h-3.5 text-white" />
+                        </button>
+                      </div>
+                      {/* Rename inline */}
+                      {renamingSubId === sub.id && (
+                        <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center p-3 z-10 gap-2" onClick={e => e.stopPropagation()}>
+                          <input value={renameSubValue} onChange={e => setRenameSubValue(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') renameSubProduct(sub.id); if (e.key === 'Escape') setRenamingSubId(null) }}
+                            className="w-full h-10 px-3 rounded-lg border text-[13px] font-semibold text-center focus:outline-none"
+                            style={{ borderColor: '#38C5B5', color: '#1A2332' }} autoFocus />
+                          <div className="flex gap-2 w-full">
+                            <button onClick={() => renameSubProduct(sub.id)}
+                              className="flex-1 h-9 rounded-lg text-[12px] font-bold text-white active:opacity-80"
+                              style={{ background: '#38C5B5' }}>Guardar</button>
+                            <button onClick={() => setRenamingSubId(null)}
+                              className="flex-1 h-9 rounded-lg text-[12px] font-semibold border active:bg-gray-100"
+                              style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>Cancelar</button>
+                          </div>
+                        </div>
+                      )}
+                    </motion.div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-16 rounded-2xl border-2 border-dashed" style={{ borderColor: '#E2E6EB' }}>
+                <FolderOpen className="w-14 h-14 mx-auto mb-3" style={{ color: '#D1D5DB' }} />
+                <p className="text-[16px] font-bold mb-1" style={{ color: '#35414A' }}>Sin categorías</p>
+                <p className="text-[13px]" style={{ color: '#ADB5B7' }}>Crea una categoría para organizar las fotos del proyecto</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ═<arg_value> BREADCRUMB when inside a category ═══ */}
+        {selectedSubId && selectedSub && (
+          <div className="flex items-center gap-2 mb-4">
+            <button onClick={() => { setSelectedSubId(null); setReorderMode(false); setSelectMode(false); setSelectedIds(new Set()) }}
+              className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold border transition-colors"
+              style={{ borderColor: '#E2E6EB', color: '#5D7380', background: '#FAFAFA' }}>
+              <ChevronLeft className="w-3.5 h-3.5" /> Categorías
+            </button>
+            <ChevronRightIcon className="w-3.5 h-3.5" style={{ color: '#ADB5B7' }} />
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <Folder className="w-4 h-4 shrink-0" style={{ color: '#38C5B5' }} />
+              <span className="text-[14px] font-bold truncate" style={{ color: '#1A2332' }}>{selectedSub.name}</span>
+              <span className="text-[11px] font-mono shrink-0" style={{ color: '#ADB5B7' }}>({filteredPhotos.length})</span>
+            </div>
+            {isManagerOrAdmin() && (
+              <button onClick={() => { setRenamingSubId(selectedSubId); setRenameSubValue(selectedSub.name) }}
+                className="h-7 px-2.5 rounded-lg text-[11px] font-semibold border"
+                style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>
+                <Pencil className="w-3 h-3 inline" /> Renombrar
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Rename overlay for breadcrumb rename */}
+        {renamingSubId && selectedSubId && renamingSubId === selectedSubId && (
+          <div className="mb-4 flex gap-2">
+            <input value={renameSubValue} onChange={e => setRenameSubValue(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { renameSubProduct(renamingSubId); } if (e.key === 'Escape') setRenamingSubId(null) }}
+              className="flex-1 h-10 px-4 rounded-lg border text-[14px] font-semibold focus:outline-none"
+              style={{ borderColor: '#38C5B5', color: '#1A2332' }} autoFocus />
+            <button onClick={() => { renameSubProduct(renamingSubId); }}
+              className="h-10 px-5 rounded-lg text-[13px] font-bold text-white" style={{ background: '#38C5B5' }}>Guardar</button>
+            <button onClick={() => setRenamingSubId(null)}
+              className="h-10 px-4 rounded-lg text-[13px] font-semibold border" style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>X</button>
+          </div>
+        )}
 
         {/* Uploading indicator */}
         {uploading && (
@@ -431,11 +740,12 @@ export default function ProjectDetailPage() {
           </div>
         )}
 
-        {/* Tabs */}
+        {/* Tabs — only show when inside a category */}
+        {selectedSubId && (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-6 h-auto gap-1 p-1 rounded-xl bg-white border" style={{ borderColor: '#E2E6EB' }}>
             {[
-              { id: 'gallery', label: 'Fotos', icon: Image, count: photos.length },
+              { id: 'gallery', label: 'Fotos', icon: Image, count: filteredPhotos.length },
               { id: 'tasks', label: 'Tareas', icon: CheckSquare, count: tasks.length },
               { id: 'timeline', label: 'Actividad', icon: Clock },
             ].map(tab => (
@@ -452,121 +762,22 @@ export default function ProjectDetailPage() {
               </TabsTrigger>
             ))}
             {/* Select mode toggle */}
-            <button onClick={() => { setSelectMode(!selectMode); setSelectedIds(new Set()) }}
+            <button onClick={reorderMode ? savePhotoOrder : () => { setSelectMode(!selectMode); setSelectedIds(new Set()) }}
               className="ml-auto px-3 py-2 rounded-lg text-[12px] font-semibold transition-all"
-              style={{ color: selectMode ? '#38C5B5' : '#ADB5B7', background: selectMode ? '#F0FDFA' : 'transparent' }}>
-              Seleccionar
+              style={{ color: (selectMode || reorderMode) ? '#38C5B5' : '#ADB5B7', background: (selectMode || reorderMode) ? '#F0FDFA' : 'transparent' }}>
+              {reorderMode ? 'Guardar orden' : selectMode ? 'Seleccionar' : 'Ordenar'}
             </button>
           </TabsList>
 
           {/* Gallery Tab */}
           <TabsContent value="gallery">
-            {/* == CATEGORIES == */}
-            {!selectedSubId && (
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Folder className="w-5 h-5" style={{ color: '#38C5B5' }} />
-                    <h2 className="text-[16px] font-bold" style={{ color: '#1A2332' }}>Categorías</h2>
-                    <Badge variant="secondary" className="text-[11px] px-2 py-0.5" style={{ background: '#F0FDFA', color: '#38C5B5', border: '1px solid #99F6E4' }}>{subProducts.length}</Badge>
-                  </div>
-                  <button onClick={() => setShowNewSub(!showNewSub)} className="h-8 px-3 rounded-lg text-[12px] font-bold border flex items-center gap-1.5 active:bg-gray-50"
-                    style={{ borderColor: '#99F6E4', color: '#38C5B5', background: showNewSub ? '#F0FDFA' : 'white' }}>
-                    <Plus className="w-4 h-4" /> Nueva categoría
-                  </button>
-                </div>
-                {showNewSub && (
-                  <div className="flex gap-2 mb-4 p-4 rounded-xl border" style={{ borderColor: '#99F6E4', background: '#F0FDFA' }}>
-                    <input value={newSubName} onChange={e => setNewSubName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') createSubProduct(); if (e.key === 'Escape') setShowNewSub(false) }}
-                      placeholder="Nombre de la categoría..."
-                      className="flex-1 h-10 px-4 rounded-lg border text-[14px] focus:outline-none" style={{ borderColor: '#99F6E4', color: '#1A2332', background: 'white' }} autoFocus />
-                    <button onClick={createSubProduct} disabled={!newSubName.trim()} className="h-10 px-5 rounded-lg text-[13px] font-bold text-white disabled:opacity-40" style={{ background: '#2DA194' }}>Crear</button>
-                  </div>
-                )}
-                {subProducts.length > 0 ? (
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {subProducts.map((sub, idx) => (
-                      <motion.div key={sub.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.03 }}
-                        className="relative group rounded-xl overflow-hidden border bg-white cursor-pointer active:scale-[0.98] transition-transform"
-                        style={{ borderColor: '#E8EBF0' }}
-                        onClick={() => { setSelectedSubId(sub.id); setTagFilter('ALL') }}>
-                        <div className="aspect-[4/3] overflow-hidden relative" style={{ background: 'linear-gradient(135deg, #F0FDFA, #CCFBF1)' }}>
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                          <div className="absolute bottom-0 left-0 right-0 p-3">
-                            <p className="text-[13px] font-bold text-white truncate">{sub.name}</p>
-                            <p className="text-[10px] text-white/70">{sub._count?.photos || 0} foto{sub._count?.photos !== 1 ? 's' : ''}</p>
-                          </div>
-                        </div>
-                        <div className="absolute top-2 right-2 flex gap-1">
-                          <button onClick={(e) => { e.stopPropagation(); setRenamingSubId(sub.id); setRenameSubValue(sub.name) }}
-                            className="h-7 w-7 rounded-lg flex items-center justify-center bg-white/90 shadow-sm active:bg-[#38C5B5]/80">
-                            <Pencil className="w-3.5 h-3.5" style={{ color: '#5D7380' }} />
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); deleteSubProduct(sub.id) }}
-                            className="h-7 w-7 rounded-lg flex items-center justify-center bg-red-500/90 shadow-sm active:bg-red-600">
-                            <Trash2 className="w-3.5 h-3.5 text-white" />
-                          </button>
-                        </div>
-                        {renamingSubId === sub.id && (
-                          <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center p-3 z-10 gap-2" onClick={e => e.stopPropagation()}>
-                            <input value={renameSubValue} onChange={e => setRenameSubValue(e.target.value)}
-                              onKeyDown={e => { if (e.key === 'Enter') renameSubProduct(sub.id); if (e.key === 'Escape') setRenamingSubId(null) }}
-                              className="w-full h-10 px-3 rounded-lg border text-[13px] font-semibold text-center focus:outline-none"
-                              style={{ borderColor: '#38C5B5', color: '#1A2332' }} autoFocus />
-                            <div className="flex gap-2 w-full">
-                              <button onClick={() => renameSubProduct(sub.id)} className="flex-1 h-9 rounded-lg text-[12px] font-bold text-white active:opacity-80" style={{ background: '#38C5B5' }}>Guardar</button>
-                              <button onClick={() => setRenamingSubId(null)} className="flex-1 h-9 rounded-lg text-[12px] font-semibold border active:bg-gray-100" style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>Cancelar</button>
-                            </div>
-                          </div>
-                        )}
-                      </motion.div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-16 rounded-2xl border-2 border-dashed" style={{ borderColor: '#E2E6EB' }}>
-                    <FolderOpen className="w-14 h-14 mx-auto mb-3" style={{ color: '#D1D5DB' }} />
-                    <p className="text-[16px] font-bold mb-1" style={{ color: '#35414A' }}>Sin categorías</p>
-                    <p className="text-[13px]" style={{ color: '#ADB5B7' }}>Crea una categoría para organizar las fotos del proyecto</p>
-                  </div>
-                )}
+            {/* Filters + Reorder banner */}
+            {reorderMode && (
+              <div className="flex items-center justify-between p-3 rounded-xl mb-4" style={{ background: '#F0FDFA', border: '1px solid #99F6E4' }}>
+                <span className="text-[12px] font-semibold" style={{ color: '#115E59' }}>Modo reordenar — usa las flechas en cada foto</span>
+                <button onClick={() => setReorderMode(false)} className="text-[12px] font-semibold" style={{ color: '#5D7380' }}>Cancelar</button>
               </div>
             )}
-            {/* BREADCRUMB when inside a category */}
-            {selectedSubId && (() => {
-              const sel = subProducts.find(s => s.id === selectedSubId)
-              if (!sel) return null
-              return (
-                <div className="flex items-center gap-2 mb-4">
-                  <button onClick={() => { setSelectedSubId(null); setTagFilter('ALL') }} className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold border transition-colors"
-                    style={{ borderColor: '#E2E6EB', color: '#5D7380', background: '#FAFAFA' }}>
-                    <ChevronLeft className="w-3.5 h-3.5" /> Categorías
-                  </button>
-                  <ChevronRight className="w-3.5 h-3.5" style={{ color: '#ADB5B7' }} />
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <Folder className="w-4 h-4 shrink-0" style={{ color: '#38C5B5' }} />
-                    <span className="text-[14px] font-bold truncate" style={{ color: '#1A2332' }}>{sel.name}</span>
-                    <span className="text-[11px] font-mono shrink-0" style={{ color: '#ADB5B7' }}>({filteredPhotos.length})</span>
-                  </div>
-                  <button onClick={() => { setRenamingSubId(selectedSubId); setRenameSubValue(sel.name) }}
-                    className="h-7 px-2.5 rounded-lg text-[11px] font-semibold border" style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>
-                    <Pencil className="w-3 h-3 inline" /> Renombrar
-                  </button>
-                </div>
-              )
-            })()}
-            {/* Rename input for breadcrumb */}
-            {renamingSubId && selectedSubId && renamingSubId === selectedSubId && (
-              <div className="mb-4 flex gap-2">
-                <input value={renameSubValue} onChange={e => setRenameSubValue(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') { renameSubProduct(renamingSubId); } if (e.key === 'Escape') setRenamingSubId(null) }}
-                  className="flex-1 h-10 px-4 rounded-lg border text-[14px] font-semibold focus:outline-none"
-                  style={{ borderColor: '#38C5B5', color: '#1A2332' }} autoFocus />
-                <button onClick={() => { renameSubProduct(renamingSubId); }} className="h-10 px-5 rounded-lg text-[13px] font-bold text-white" style={{ background: '#38C5B5' }}>Guardar</button>
-                <button onClick={() => setRenamingSubId(null)} className="h-10 px-4 rounded-lg text-[13px] font-semibold border" style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>X</button>
-              </div>
-            )}
-
-            {/* Filters */}
             <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
               {[{ id: 'ALL', label: 'Todas', color: '#38C5B5' }, { id: 'antes', label: 'ANTES', color: '#F0A030' }, { id: 'despues', label: 'DESPUÉS', color: '#2DA194' }].map(f => (
                 <button key={f.id} onClick={() => setTagFilter(f.id)} className="px-3.5 py-2 rounded-lg text-[12px] font-bold tracking-wide whitespace-nowrap border transition-all"
@@ -574,46 +785,79 @@ export default function ProjectDetailPage() {
                   {f.label}
                 </button>
               ))}
-              {allLocales.map(loc => (
-                <button key={loc} onClick={() => setTagFilter(loc)} className="px-3.5 py-2 rounded-lg text-[12px] font-semibold whitespace-nowrap border transition-all"
-                  style={{ background: tagFilter === loc ? '#35414A' : 'white', color: tagFilter === loc ? 'white' : '#5D7380', borderColor: tagFilter === loc ? '#35414A' : '#E2E6EB' }}>
-                  {loc}
-                </button>
-              ))}
             </div>
 
             {/* Photo grid */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-              {filteredPhotos.map((photo, i) => {
+              {(reorderMode ? localPhotos : filteredPhotos).map((photo, i) => {
                 const phase = getPhase(photo)
-                const local = getLocal(photo)
                 const isSelected = selectedIds.has(photo.id)
+                const photoDate = new Date(photo.createdAt).toLocaleString('es-MX', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
                 return (
-                  <motion.div key={photo.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
-                    className="relative group rounded-xl overflow-hidden border aspect-[4/3]"
-                    style={{ borderColor: isSelected ? '#38C5B5' : '#E8EBF0' }}>
-                    <img src={photo.thumbnailUrl || photo.url} alt={photo.caption || ''} className="w-full h-full object-cover cursor-pointer" loading="lazy"
-                      onClick={() => selectMode ? toggleSelect(photo.id) : setLightboxIdx(i)} />
-                    {/* Phase badge */}
-                    <div className="absolute top-2 left-2 flex flex-col gap-1 pointer-events-none">
-                      {phase && <span className="px-2 py-0.5 rounded-md text-[10px] font-bold text-white" style={{ background: phase === 'antes' ? '#F0A030' : '#2DA194' }}>{phase === 'antes' ? 'ANTES' : 'DESPUÉS'}</span>}
-                      {local && <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold text-white" style={{ background: 'rgba(26,35,50,0.7)' }}>{local}</span>}
-                    </div>
-                    {/* Download button (bottom right) */}
-                    <button onClick={(e) => { e.stopPropagation(); downloadPhoto(photo) }}
-                      className="absolute bottom-2 right-2 h-7 w-7 rounded-lg flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
-                      <Download className="w-3.5 h-3.5 text-white" />
-                    </button>
-                    {/* Select checkbox */}
-                    {selectMode && (
-                      <div className="absolute top-2 right-2" onClick={(e) => { e.stopPropagation(); toggleSelect(photo.id) }}>
-                        <div className="h-6 w-6 rounded-md border-2 flex items-center justify-center transition-all"
-                          style={{ borderColor: isSelected ? '#38C5B5' : 'rgba(255,255,255,0.6)', background: isSelected ? '#38C5B5' : 'rgba(0,0,0,0.3)' }}>
-                          {isSelected && <CheckCircle className="w-4 h-4 text-white" />}
-                        </div>
+                  <motion.div key={photo.id} layout={reorderMode} initial={reorderMode ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: reorderMode ? 0 : i * 0.03 }}
+                    className="relative group rounded-xl overflow-hidden border bg-white"
+                    style={{ borderColor: reorderMode ? '#38C5B5' : isSelected ? '#38C5B5' : '#E8EBF0' }}>
+                    {/* Reorder arrows */}
+                    {reorderMode && (
+                      <div className="absolute top-1/2 -translate-y-1/2 -right-2 z-10 flex flex-col gap-0.5">
+                        <button onClick={(e) => { e.stopPropagation(); movePhoto(i, -1) }} disabled={i === 0}
+                          className="h-6 w-6 rounded-full bg-white border shadow-sm flex items-center justify-center disabled:opacity-30"
+                          style={{ borderColor: '#E2E6EB' }}><ChevronUp className="w-3.5 h-3.5" style={{ color: '#35414A' }} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); movePhoto(i, 1) }} disabled={i === localPhotos.length - 1}
+                          className="h-6 w-6 rounded-full bg-white border shadow-sm flex items-center justify-center disabled:opacity-30"
+                          style={{ borderColor: '#E2E6EB' }}><ChevronDown className="w-3.5 h-3.5" style={{ color: '#35414A' }} /></button>
                       </div>
                     )}
-                    {photo.caption && <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/60 to-transparent pointer-events-none"><p className="text-[11px] text-white font-medium truncate">{photo.caption}</p></div>}
+                    {/* Image */}
+                    <div className="relative aspect-[4/3] overflow-hidden">
+                      <img src={photo.thumbnailUrl || photo.url} alt={photo.caption || ''} className="w-full h-full object-cover cursor-pointer" loading="lazy"
+                        onClick={() => reorderMode ? null : selectMode ? toggleSelect(photo.id) : setLightboxIdx(i)} />
+                      {/* Phase badge */}
+                      {phase && (
+                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold text-white pointer-events-none"
+                          style={{ background: phase === 'antes' ? '#F0A030' : '#2DA194' }}>{phase === 'antes' ? 'ANTES' : 'DESPUÉS'}</span>
+                      )}
+                      {/* Action buttons */}
+                      {!reorderMode && (
+                        <div className="absolute top-2 right-2 flex gap-1">
+                          <button onClick={(e) => { e.stopPropagation(); setAssigningSubPhotoId(photo.id) }}
+                            className="h-7 w-7 rounded-lg flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm"
+                            title="Mover a categoría">
+                            <Folder className="w-3.5 h-3.5 text-white" />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); downloadPhoto(photo) }}
+                            className="h-7 w-7 rounded-lg flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                            <Download className="w-3.5 h-3.5 text-white" />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); openPhotoNote(photo) }}
+                            className="h-7 w-7 rounded-lg flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
+                            <StickyNote className="w-3.5 h-3.5 text-white" />
+                          </button>
+                        </div>
+                      )}
+                      {/* Select checkbox */}
+                      {selectMode && !reorderMode && (
+                        <div className="absolute top-2 right-2" onClick={(e) => { e.stopPropagation(); toggleSelect(photo.id) }}>
+                          <div className="h-6 w-6 rounded-md border-2 flex items-center justify-center transition-all"
+                            style={{ borderColor: isSelected ? '#38C5B5' : 'rgba(255,255,255,0.6)', background: isSelected ? '#38C5B5' : 'rgba(0,0,0,0.3)' }}>
+                            {isSelected && <CheckCircle className="w-4 h-4 text-white" />}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {/* Date + inline editable note BELOW the photo */}
+                    <div className="px-2.5 py-2">
+                      <p className="text-[11px] font-semibold" style={{ color: '#1A2332' }}>{photoDate}</p>
+                      <input
+                        value={editingNoteId === photo.id ? editingNoteText : (photo.caption || '')}
+                        onChange={e => { setEditingNoteId(photo.id); setEditingNoteText(e.target.value) }}
+                        onBlur={() => { if (editingNoteId === photo.id) saveInlineNote(photo.id, editingNoteText) }}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); (document.activeElement as HTMLInputElement)?.blur() } }}
+                        placeholder="Agregar nota..."
+                        className="w-full text-[11px] rounded-md border border-transparent focus:border-[#38C5B5]/50 focus:outline-none px-2 py-1 mt-1 transition-colors"
+                        style={{ color: photo.caption ? '#35414A' : '#ADB5B7', background: '#F7F8FA' }}
+                      />
+                    </div>
                   </motion.div>
                 )
               })}
@@ -667,9 +911,119 @@ export default function ProjectDetailPage() {
             </div>
           </TabsContent>
         </Tabs>
+        )}
+
       </div>
 
       <div className="h-20 lg:h-0" />
+
+      {/* ═══ Project Note Modal ═══ */}
+      {showNoteEditor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowNoteEditor(false)} />
+          <div className="relative w-[360px] bg-white rounded-2xl overflow-hidden shadow-xl">
+            <div className="p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#FFF7ED' }}>
+                  <StickyNote className="w-5 h-5" style={{ color: '#F0A030' }} />
+                </div>
+                <h3 className="text-[17px] font-bold" style={{ color: '#1A2332' }}>Notas del proyecto</h3>
+              </div>
+              <textarea
+                value={projectNote}
+                onChange={e => setProjectNote(e.target.value)}
+                autoFocus
+                rows={6}
+                className="w-full text-[14px] rounded-xl border px-4 py-3 resize-none focus:outline-none focus:border-[#F0A030]/40"
+                style={{ borderColor: '#E2E6EB', color: '#1A2332' }}
+                placeholder="Escribe indicaciones, observaciones, detalles del proyecto..."
+              />
+            </div>
+            <div className="flex border-t" style={{ borderColor: '#E8EBF0' }}>
+              <button onClick={() => setShowNoteEditor(false)} disabled={savingNote}
+                className="flex-1 h-12 text-[14px] font-semibold border-r" style={{ color: '#5D7380', borderColor: '#E8EBF0' }}>Cancelar</button>
+              <button onClick={saveProjectNote} disabled={savingNote}
+                className="flex-1 h-12 text-[14px] font-semibold text-white flex items-center justify-center gap-2 disabled:opacity-50"
+                style={{ background: '#F0A030' }}>
+                {savingNote ? <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Photo Note Modal ═══ */}
+      {notePhotoId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setNotePhotoId(null)} />
+          <div className="relative w-[340px] bg-white rounded-2xl overflow-hidden shadow-xl">
+            <div className="p-5">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#F0FDFA' }}>
+                  <StickyNote className="w-5 h-5" style={{ color: '#38C5B5' }} />
+                </div>
+                <h3 className="text-[17px] font-bold" style={{ color: '#1A2332' }}>Nota de foto</h3>
+              </div>
+              <textarea
+                value={notePhotoText}
+                onChange={e => setNotePhotoText(e.target.value)}
+                autoFocus
+                rows={3}
+                className="w-full text-[14px] rounded-xl border px-4 py-3 resize-none focus:outline-none focus:border-[#38C5B5]/40"
+                style={{ borderColor: '#E2E6EB', color: '#1A2332' }}
+                placeholder="Indicaciones de esta foto..."
+              />
+            </div>
+            <div className="flex border-t" style={{ borderColor: '#E8EBF0' }}>
+              <button onClick={() => setNotePhotoId(null)}
+                className="flex-1 h-12 text-[14px] font-semibold border-r" style={{ color: '#5D7380', borderColor: '#E8EBF0' }}>Cancelar</button>
+              <button onClick={savePhotoNote}
+                className="flex-1 h-12 text-[14px] font-semibold text-white flex items-center justify-center gap-2"
+                style={{ background: '#38C5B5' }}>
+                <Save className="w-4 h-4" /> Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Assign Photo to SubProduct Modal ═══ */}
+      {assigningSubPhotoId && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setAssigningSubPhotoId(null)} />
+          <div className="relative w-full sm:w-[340px] bg-white rounded-t-2xl sm:rounded-2xl overflow-hidden shadow-xl max-h-[70vh] flex flex-col">
+            <div className="p-5 pb-3 shrink-0">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#F0FDFA' }}>
+                  <Folder className="w-5 h-5" style={{ color: '#38C5B5' }} />
+                </div>
+                <h3 className="text-[17px] font-bold" style={{ color: '#1A2332' }}>Mover a categoría</h3>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 pb-2">
+              <button onClick={() => assignPhotoToSub(assigningSubPhotoId, null)}
+                className="w-full flex items-center gap-3 p-3 rounded-xl mb-1 border transition-colors text-left"
+                style={{ borderColor: '#E2E6EB', background: '#FAFAFA' }}>
+                <Image className="w-4 h-4 shrink-0" style={{ color: '#9CA3AF' }} />
+                <span className="text-[13px] font-medium" style={{ color: '#5D7380' }}>Sin categoría</span>
+              </button>
+              {subProducts.map(sub => (
+                <button key={sub.id} onClick={() => assignPhotoToSub(assigningSubPhotoId, sub.id)}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl mb-1 border transition-colors text-left"
+                  style={{ borderColor: photos.find(p => p.id === assigningSubPhotoId)?.subProductId === sub.id ? '#38C5B5' : '#E2E6EB', background: photos.find(p => p.id === assigningSubPhotoId)?.subProductId === sub.id ? '#F0FDFA' : 'white' }}>
+                  <Folder className="w-4 h-4 shrink-0" style={{ color: '#38C5B5' }} />
+                  <span className="text-[13px] font-semibold flex-1 truncate" style={{ color: '#1A2332' }}>{sub.name}</span>
+                  <span className="text-[10px] font-mono" style={{ color: '#ADB5B7' }}>{sub._count.photos}</span>
+                </button>
+              ))}
+            </div>
+            <div className="p-4 pt-2 border-t shrink-0" style={{ borderColor: '#E8EBF0' }}>
+              <button onClick={() => setAssigningSubPhotoId(null)} className="w-full h-11 text-[14px] font-semibold rounded-xl" style={{ color: '#5D7380' }}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ═══ FULLSCREEN LIGHTBOX ═══ */}
       <AnimatePresence>

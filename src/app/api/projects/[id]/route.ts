@@ -115,7 +115,7 @@ export async function PUT(
     const allowedFields = [
       'name', 'clientName', 'clientEmail', 'address', 'city',
       'state', 'zipCode', 'latitude', 'longitude', 'description',
-      'priority', 'progress', 'coverImage',
+      'priority', 'progress', 'coverImage', 'sortOrder',
     ];
 
     for (const field of allowedFields) {
@@ -163,6 +163,40 @@ export async function PUT(
       { error: 'Internal server error' },
       { status: 500 }
     );
+  }
+}
+
+// PATCH /api/projects/[id]/reorder - Batch update sort order
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+
+    // Reorder: body.items = [{ id, sortOrder }] | rename: body.name
+    if (body.items && Array.isArray(body.items)) {
+      for (const item of body.items) {
+        await db.project.update({ where: { id: item.id }, data: { sortOrder: item.sortOrder } });
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    // Single field update (rename)
+    const data: Record<string, unknown> = {};
+    if (body.name !== undefined) data.name = body.name;
+    if (body.description !== undefined) data.description = body.description;
+
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
+    }
+
+    const project = await db.project.update({ where: { id }, data });
+    return NextResponse.json({ project });
+  } catch (error) {
+    console.error('Patch project error:', error);
+    return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }
 

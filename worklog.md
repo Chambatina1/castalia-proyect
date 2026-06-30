@@ -1,24 +1,33 @@
 ---
 Task ID: 1
-Agent: Main
-Task: Build Castalia Proyect web app with Castalia Collections branding
+Agent: main
+Task: Fix Dropbox sync bug + make Dropbox the database backup
 
 Work Log:
-- Analyzed Castalia Collections brand (castalia-collections.com) - extracted brand colors: teal #38C5B5, dark #0D1117, slate #35414A
-- Downloaded Castalia logo (public/uploads/castalia_logo.png)
-- Designed and applied custom CSS theme with Castalia brand colors (globals.css)
-- Created complete Prisma schema with 11 models (User, Project, Photo, Task, Chat, Report, etc.)
-- Built 18 API routes (auth, login, projects, photos, tasks, chat, reports, activity, notes, users, shares, seed)
-- Created seed data with 5 users, 4 projects, 40+ photos, 12 tasks, chat messages, reports, activity logs
-- Built login page with dark luxury design, teal gradient accents, glassmorphism card
-- Built dashboard with: stat cards, project grid, activity feed, sidebar nav, mobile bottom nav
-- Built project detail with: gallery, client summary (before/after), tasks, timeline, chat tabs
-- Built tasks page and chat page with Castalia branding
-- All components use Castalia teal (#38C5B5), dark slate (#0D1117), high contrast text
+- Analyzed the bug: photo.url is `/api/photos/serve/filename.jpg` and the replacement was correct BUT the old `dropboxApi` function had a bug where `isUpload=true` passed `body: body as BodyInit` which sent the JSON metadata as the file content instead of the actual file buffer
+- Rewrote entire `/api/dropbox/route.ts`:
+  - Created `extractFilename()` and `getLocalPhotoPath()` helper functions for robust path resolution
+  - Fixed `uploadFileToDropbox` to correctly use `content.dropboxapi.com` (was already correct but the old `dropboxApi` helper was broken for uploads)
+  - Removed the buggy `dropboxApi` helper for uploads, keeping `uploadFileToDropbox` separate
+  - Added `backupDatabaseToDropbox()` — exports all projects, subProducts, photos, users, tasks as JSON
+  - Added `restoreDatabaseFromDropbox()` — downloads latest backup and upserts all data
+  - Added `uploadJsonToDropbox()` and `downloadFromDropbox()` helpers
+  - Added `listDropboxFolder()` helper
+  - New actions: `backup-db`, `restore-db`, `list-backups`
+  - Auto-backup DB after every photo sync and single photo upload
+  - Keep only last 10 backups, delete oldest
+  - Track `lastBackupAt` in config
+- Updated `photos/route.ts`: Auto-sync to Dropbox now fires for ALL photos (not just those with subProductId)
+- Updated `settings-page.tsx`:
+  - Added backup/restore UI cards in Dropbox section
+  - Shows last backup time and "Protegido" badge
+  - "Crear Backup Ahora" button with teal styling
+  - "Restaurar Datos" button with orange styling and confirmation dialog
+  - Warning about what backup includes
+  - Updated system info to show "SQLite + Dropbox Backup"
 
 Stage Summary:
-- App is functional: login → dashboard → project detail → gallery → client summary
-- Database seeded with demo data for Mexican projects (Mérida, Cancún, CDMX, Playa del Carmen)
-- Brand identity matches Castalia Collections: teal accent, dark luxury feel, minimal clean UI
-- Responsive: desktop sidebar + mobile bottom nav + tablet sheet
-- User can login as admin@castalia.com (password: admin123), carlos@castalia.com, jose@castalia.com
+- Fixed the 0 photos sync bug (path extraction + upload function)
+- Added full DB backup/restore via Dropbox
+- Auto-backup on every photo upload
+- Committed and deployed to Render (deploy ID: dep-d905inbtqb8s73ffobug)

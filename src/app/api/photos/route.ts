@@ -33,10 +33,12 @@ export async function GET(request: NextRequest) {
     const uploadedBy = searchParams.get('uploadedBy');
     const isApproved = searchParams.get('isApproved');
 
+    const subProductId = searchParams.get('subProductId');
     const where: Record<string, unknown> = {};
 
     if (projectId) where.projectId = projectId;
     if (tag) where.tags = { contains: tag };
+    if (subProductId) where.subProductId = subProductId;
     if (uploadedBy) where.uploadedBy = uploadedBy;
     if (isApproved !== null && isApproved !== undefined && isApproved !== '') {
       where.isApproved = isApproved === 'true';
@@ -48,7 +50,7 @@ export async function GET(request: NextRequest) {
         uploader: { select: { id: true, name: true, avatar: true } },
         project: { select: { id: true, name: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     });
 
     return NextResponse.json({ photos });
@@ -111,6 +113,7 @@ export async function POST(request: NextRequest) {
         const bytes = await file.arrayBuffer();
         await writeFile(filepath, Buffer.from(bytes));
 
+        const subProductId = (formData.get('subProductId') as string) || null;
         const url = `/api/photos/serve/${filename}`;
         savedUrls.push(url);
 
@@ -136,6 +139,7 @@ export async function POST(request: NextRequest) {
             tags: JSON.stringify(tagArr),
             caption: photoCaption,
             isUrgent: isUrgent === 'true',
+            ...(subProductId && { subProductId }),
           },
           include: {
             uploader: { select: { id: true, name: true, avatar: true } },
@@ -143,6 +147,19 @@ export async function POST(request: NextRequest) {
         });
 
         savedPhotos.push(photo);
+
+        // Fire-and-forget: sync to Dropbox if connected (always, not just when subProductId)
+        {
+          const subProductName = subProductId
+            ? (await db.subProduct.findUnique({ where: { id: subProductId }, select: { name: true } }))?.name || 'General'
+            : 'General';
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+          fetch(`${appUrl}/api/dropbox`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'upload-photo', photoId: photo.id, projectId, fase, subProductName }),
+          }).catch(() => {});
+        }
       }
 
       // Create activity log
