@@ -80,6 +80,7 @@ model Project {
   activityLogs    ActivityLog[]
   internalNotes   InternalNote[]
   clientShares    ClientShare[]
+  subProducts     SubProduct[]
 
   @@index([status])
   @@index([priority])
@@ -122,12 +123,15 @@ model Photo {
   isApproved    Boolean   @default(false)
   isVisibleToClient Boolean @default(false)
   isUrgent      Boolean   @default(false)
+  subProductId  String?
+  subProduct    SubProduct?  @relation(fields: [subProductId], references: [id], onDelete: SetNull)
   createdAt     DateTime  @default(now())
 
   @@index([projectId])
   @@index([uploadedBy])
   @@index([isApproved])
   @@index([isVisibleToClient])
+  @@index([subProductId])
 }
 
 model Task {
@@ -243,6 +247,20 @@ model ClientShare {
 
   @@index([projectId])
   @@index([token])
+}
+
+model SubProduct {
+  id          String    @id @default(cuid())
+  name        String
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  photos      Photo[]
+
+  @@index([projectId])
 }
 
 model Notification {

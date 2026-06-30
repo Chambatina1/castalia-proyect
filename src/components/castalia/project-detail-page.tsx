@@ -461,7 +461,7 @@ export default function ProjectDetailPage() {
 
           {/* Gallery Tab */}
           <TabsContent value="gallery">
-            {/* == CATEGORIES == */
+            {/* == CATEGORIES == */}
             {!selectedSubId && (
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-3">

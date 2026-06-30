@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { Camera, ImagePlus, Upload, CheckCircle, AlertCircle, Loader2, ArrowLeft, X, ChevronDown } from 'lucide-react'
 import { useSearchParams } from 'next/navigation'
 
@@ -10,7 +10,7 @@ interface ProjectInfo {
   clientName: string | null
 }
 
-export default function UploadPage() {
+function UploadContent() {
   const searchParams = useSearchParams()
   const token = searchParams.get('token') || ''
 
@@ -290,5 +290,20 @@ export default function UploadPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function UploadPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#F8FAFB' }}>
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" style={{ color: '#38C5B5' }} />
+          <p className="text-sm font-semibold" style={{ color: '#5D7380' }}>Cargando...</p>
+        </div>
+      </div>
+    }>
+      <UploadContent />
+    </Suspense>
   )
 }
