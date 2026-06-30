@@ -15,7 +15,7 @@ function getExtension(mimeType: string): string {
   return map[mimeType] || 'jpg'
 }
 
-// GET /api/upload-token?token=xxx — Validate token, return project info
+// GET /api/upload-token?token=xxx — Validate token, return project info + categories
 export async function GET(request: NextRequest) {
   try {
     const token = new URL(request.url).searchParams.get('token')
@@ -34,10 +34,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Link expirado' }, { status: 410 })
     }
 
+    // Fetch categories (subproducts) for this project
+    const subProducts = await db.subProduct.findMany({
+      where: { projectId: share.project.id },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      include: { _count: { select: { photos: true } } },
+    })
+
     return NextResponse.json({
       projectId: share.project.id,
       projectName: share.project.name,
       clientName: share.clientName,
+      categories: subProducts.map(sp => ({
+        id: sp.id,
+        name: sp.name,
+        photoCount: sp._count.photos,
+      })),
     })
   } catch (error) {
     console.error('Upload token validate error:', error)
@@ -58,13 +70,14 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const token = formData.get('token') as string
     const fase = (formData.get('fase') as string) || ''
+    const subProductId = (formData.get('subProductId') as string) || null
 
     if (!token) return NextResponse.json({ error: 'Token requerido' }, { status: 400 })
 
     // Validate token
     const share = await db.clientShare.findUnique({
       where: { token },
-      include: { project: { select: { id: true } } },
+      include: { project: { select: { id: true, name: true } } },
     })
 
     if (!share || !share.isActive) {
@@ -73,6 +86,12 @@ export async function POST(request: NextRequest) {
 
     if (share.expiresAt && new Date(share.expiresAt) < new Date()) {
       return NextResponse.json({ error: 'Link expirado' }, { status: 410 })
+    }
+
+    // If subProductId provided, verify it belongs to this project
+    if (subProductId) {
+      const sub = await db.subProduct.findFirst({ where: { id: subProductId, projectId: share.project.id } })
+      if (!sub) return NextResponse.json({ error: 'Categoría no encontrada' }, { status: 400 })
     }
 
     const projectId = share.project.id
@@ -93,6 +112,13 @@ export async function POST(request: NextRequest) {
         })
       }
       workerId = worker.id
+    }
+
+    // Get subProduct name for Dropbox
+    let subProductName = 'General'
+    if (subProductId) {
+      const sp = await db.subProduct.findUnique({ where: { id: subProductId }, select: { name: true } })
+      if (sp) subProductName = sp.name
     }
 
     const savedPhotos: Record<string, unknown>[] = []
@@ -119,10 +145,19 @@ export async function POST(request: NextRequest) {
           fileType: file.type.startsWith('image/') ? 'image' : 'video',
           tags,
           caption: fase === 'antes' ? 'Fase: Antes' : fase === 'despues' ? 'Fase: Después' : null,
+          ...(subProductId && { subProductId }),
         },
       })
 
       savedPhotos.push(photo)
+
+      // Fire-and-forget: sync to Dropbox if connected
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || ''
+      fetch(`${appUrl}/api/dropbox`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'upload-photo', photoId: photo.id, projectId, fase, subProductName }),
+      }).catch(() => {})
     }
 
     // Update last accessed
@@ -137,7 +172,7 @@ export async function POST(request: NextRequest) {
           action: 'UPLOADED',
           entityType: 'PHOTO',
           entityId: (savedPhotos[0] as { id: string }).id,
-          details: `Trabajador subió ${savedPhotos.length} foto(s) — ${fase || 'sin fase'}`,
+          details: `Trabajador subió ${savedPhotos.length} foto(s) — ${fase || 'sin fase'} — ${subProductName}`,
         },
       })
     }

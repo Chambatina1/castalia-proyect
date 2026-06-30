@@ -2,25 +2,37 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Camera, ImagePlus, Check, X, Loader2, ArrowLeft } from 'lucide-react'
+import { Camera, ImagePlus, Check, X, Loader2, ArrowLeft, Folder, ChevronDown, AlertCircle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
-interface ProjectInfo { projectId: string; projectName: string; clientName?: string }
+interface Category {
+  id: string
+  name: string
+  photoCount: number
+}
+
+interface ProjectInfo {
+  projectId: string
+  projectName: string
+  clientName?: string
+  categories?: Category[]
+}
 
 export default function UploadPage() {
   const { toast } = useToast()
   const [token, setToken] = useState('')
   const [project, setProject] = useState<ProjectInfo | null>(null)
+  const [categories, setCategories] = useState<Category[]>([])
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
   const [workerName, setWorkerName] = useState('')
-  const [phase, setPhase] = useState<'antes' | 'despues' | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [recentUploads, setRecentUploads] = useState<{ phase: string; count: number; time: string }[]>([])
+  const [recentUploads, setRecentUploads] = useState<{ phase: string; category: string; count: number; time: string }[]>([])
   const [validated, setValidated] = useState(false)
   const [validating, setValidating] = useState(false)
-  const [selectMode, setSelectMode] = useState(false)
+  const [pendingPhase, setPendingPhase] = useState<'antes' | 'despues' | null>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
   const galleryRef = useRef<HTMLInputElement>(null)
-  const [pendingPhase, setPendingPhase] = useState<'antes' | 'despues' | null>(null)
 
   // Get token from URL on mount
   useEffect(() => {
@@ -39,8 +51,8 @@ export default function UploadPage() {
       if (!res.ok) throw new Error()
       const data = await res.json()
       setProject(data)
+      setCategories(data.categories || [])
       setValidated(true)
-      // Save token to localStorage so worker doesn't need link again
       localStorage.setItem('castalia-upload-token', t)
       localStorage.setItem('castalia-upload-project', JSON.stringify(data))
     } catch {
@@ -64,6 +76,7 @@ export default function UploadPage() {
       fd.append('token', token)
       fd.append('fase', fase)
       if (workerName.trim()) fd.append('workerName', workerName.trim())
+      if (selectedCategory) fd.append('subProductId', selectedCategory)
 
       const res = await fetch('/api/upload-token', { method: 'POST', body: fd })
       if (!res.ok) {
@@ -72,10 +85,12 @@ export default function UploadPage() {
       }
 
       const data = await res.json()
-      toast({ title: `${data.count} foto(s) subida(s)`, description: fase === 'antes' ? 'ANTES' : 'DESPUÉS' })
+      const catName = categories.find(c => c.id === selectedCategory)?.name || 'General'
+      toast({ title: `${data.count} foto(s) subida(s)`, description: `${fase === 'antes' ? 'ANTES' : 'DESPUÉS'} — ${catName}` })
 
       setRecentUploads(prev => [{
         phase: fase === 'antes' ? 'ANTES' : 'DESPUÉS',
+        category: catName,
         count: data.count,
         time: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
       }, ...prev].slice(0, 10))
@@ -129,6 +144,8 @@ export default function UploadPage() {
     )
   }
 
+  const selectedCatName = categories.find(c => c.id === selectedCategory)?.name || null
+
   // ─── Validated: show upload UI ───
   return (
     <div className="min-h-screen" style={{ background: '#F7F8FA' }}>
@@ -162,54 +179,138 @@ export default function UploadPage() {
           />
         </div>
 
-        {/* Phase buttons */}
-        <div className="grid grid-cols-2 gap-3">
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={() => { setPendingPhase('antes'); cameraRef.current?.click() }}
-            disabled={uploading}
-            className="rounded-2xl p-5 text-center border-2 transition-all disabled:opacity-50"
-            style={{ borderColor: '#F0A030', background: 'linear-gradient(135deg, #FFF7ED, #FFEDD5)' }}>
-            <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: '#F0A030' }}>
-              <Camera className="w-5 h-5 text-white" />
+        {/* Category selector */}
+        <div>
+          <label className="text-[12px] font-semibold uppercase tracking-wider block mb-1.5" style={{ color: '#5D7380' }}>
+            Categoría
+          </label>
+          {categories.length > 0 ? (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                className="w-full h-11 px-3 rounded-xl bg-white border flex items-center justify-between gap-2 focus:outline-none"
+                style={{ borderColor: selectedCategory ? '#38C5B5' : '#E2E6EB' }}>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Folder className="w-4 h-4 shrink-0" style={{ color: selectedCategory ? '#38C5B5' : '#ADB5B7' }} />
+                  <span className="text-sm truncate" style={{ color: selectedCatName ? '#1A2332' : '#ADB5B7' }}>
+                    {selectedCatName || 'Seleccionar categoría...'}
+                  </span>
+                </div>
+                <ChevronDown className="w-4 h-4 shrink-0" style={{ color: '#ADB5B7', transform: showCategoryDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+              </button>
+              <AnimatePresence>
+                {showCategoryDropdown && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    className="absolute top-full left-0 right-0 mt-1 rounded-xl border bg-white shadow-lg z-20 overflow-hidden"
+                    style={{ borderColor: '#E2E6EB', maxHeight: '200px', overflowY: 'auto' }}>
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedCategory(null); setShowCategoryDropdown(false) }}
+                      className="w-full px-3 py-3 text-left text-sm flex items-center gap-2 border-b"
+                      style={{ color: '#5D7380', borderColor: '#F3F4F6' }}>
+                      <Folder className="w-4 h-4" style={{ color: '#ADB5B7' }} />
+                      Sin categoría (General)
+                    </button>
+                    {categories.map(cat => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => { setSelectedCategory(cat.id); setShowCategoryDropdown(false) }}
+                        className="w-full px-3 py-3 text-left text-sm flex items-center justify-between gap-2 border-b last:border-0"
+                        style={{ color: '#1A2332', borderColor: '#F3F4F6' }}>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Folder className="w-4 h-4 shrink-0" style={{ color: '#38C5B5' }} />
+                          <span className="truncate">{cat.name}</span>
+                        </div>
+                        <span className="text-[11px] shrink-0 px-1.5 py-0.5 rounded" style={{ background: '#F0FDFA', color: '#2DA194' }}>
+                          {cat.photoCount}
+                        </span>
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-            <p className="text-[15px] font-bold" style={{ color: '#92400E' }}>ANTES</p>
-            <p className="text-[11px] mt-0.5" style={{ color: '#B45309' }}>Tomar foto</p>
-          </motion.button>
+          ) : (
+            <div className="flex items-center gap-2 p-3 rounded-xl" style={{ background: '#FFF7ED', border: '1px solid #FED7AA' }}>
+              <AlertCircle className="w-4 h-4 shrink-0" style={{ color: '#F0A030' }} />
+              <p className="text-[12px]" style={{ color: '#92400E' }}>No hay categorías creadas. Las fotos se guardarán en General.</p>
+            </div>
+          )}
+        </div>
 
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={() => { setPendingPhase('despues'); cameraRef.current?.click() }}
-            disabled={uploading}
-            className="rounded-2xl p-5 text-center border-2 transition-all disabled:opacity-50"
-            style={{ borderColor: '#2DA194', background: 'linear-gradient(135deg, #F0FDFA, #CCFBF1)' }}>
-            <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #38C5B5, #2DA194)' }}>
-              <Camera className="w-5 h-5 text-white" />
-            </div>
-            <p className="text-[15px] font-bold" style={{ color: '#115E59' }}>DESPUÉS</p>
-            <p className="text-[11px] mt-0.5" style={{ color: '#0F766E' }}>Tomar foto</p>
-          </motion.button>
+        {/* Phase buttons */}
+        <div>
+          <label className="text-[12px] font-semibold uppercase tracking-wider block mb-2" style={{ color: '#5D7380' }}>
+            Tomar foto
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={() => { setPendingPhase('antes'); cameraRef.current?.click() }}
+              disabled={uploading}
+              className="rounded-2xl p-5 text-center border-2 transition-all disabled:opacity-50"
+              style={{ borderColor: '#F0A030', background: 'linear-gradient(135deg, #FFF7ED, #FFEDD5)' }}>
+              <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: '#F0A030' }}>
+                <Camera className="w-5 h-5 text-white" />
+              </div>
+              <p className="text-[15px] font-bold" style={{ color: '#92400E' }}>ANTES</p>
+              <p className="text-[11px] mt-0.5" style={{ color: '#B45309' }}>Cámara</p>
+            </motion.button>
+
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={() => { setPendingPhase('despues'); cameraRef.current?.click() }}
+              disabled={uploading}
+              className="rounded-2xl p-5 text-center border-2 transition-all disabled:opacity-50"
+              style={{ borderColor: '#2DA194', background: 'linear-gradient(135deg, #F0FDFA, #CCFBF1)' }}>
+              <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #38C5B5, #2DA194)' }}>
+                <Camera className="w-5 h-5 text-white" />
+              </div>
+              <p className="text-[15px] font-bold" style={{ color: '#115E59' }}>DESPUÉS</p>
+              <p className="text-[11px] mt-0.5" style={{ color: '#0F766E' }}>Cámara</p>
+            </motion.button>
+          </div>
         </div>
 
         {/* Gallery buttons */}
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => { setPendingPhase('antes'); galleryRef.current?.click() }}
-            disabled={uploading}
-            className="h-11 rounded-xl text-[13px] font-semibold border flex items-center justify-center gap-2 disabled:opacity-50"
-            style={{ borderColor: '#F0A030', color: '#92400E' }}>
-            <ImagePlus className="w-4 h-4" />
-            Galería ANTES
-          </button>
-          <button
-            onClick={() => { setPendingPhase('despues'); galleryRef.current?.click() }}
-            disabled={uploading}
-            className="h-11 rounded-xl text-[13px] font-semibold border flex items-center justify-center gap-2 disabled:opacity-50"
-            style={{ borderColor: '#2DA194', color: '#115E59' }}>
-            <ImagePlus className="w-4 h-4" />
-            Galería DESPUÉS
-          </button>
+        <div>
+          <label className="text-[12px] font-semibold uppercase tracking-wider block mb-2" style={{ color: '#5D7380' }}>
+            Elegir de galería
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => { setPendingPhase('antes'); galleryRef.current?.click() }}
+              disabled={uploading}
+              className="h-11 rounded-xl text-[13px] font-semibold border flex items-center justify-center gap-2 disabled:opacity-50"
+              style={{ borderColor: '#F0A030', color: '#92400E' }}>
+              <ImagePlus className="w-4 h-4" />
+              Galería ANTES
+            </button>
+            <button
+              onClick={() => { setPendingPhase('despues'); galleryRef.current?.click() }}
+              disabled={uploading}
+              className="h-11 rounded-xl text-[13px] font-semibold border flex items-center justify-center gap-2 disabled:opacity-50"
+              style={{ borderColor: '#2DA194', color: '#115E59' }}>
+              <ImagePlus className="w-4 h-4" />
+              Galería DESPUÉS
+            </button>
+          </div>
         </div>
+
+        {/* Selected category indicator */}
+        {selectedCatName && (
+          <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl" style={{ background: '#F0FDFA', border: '1px solid #99F6E4' }}>
+            <Folder className="w-4 h-4" style={{ color: '#38C5B5' }} />
+            <span className="text-[12px] font-semibold" style={{ color: '#115E59' }}>
+              Fotos se guardarán en: <strong>{selectedCatName}</strong>
+            </span>
+          </div>
+        )}
 
         {/* Uploading indicator */}
         {uploading && (
@@ -233,7 +334,7 @@ export default function UploadPage() {
                     </div>
                     <div>
                       <p className="text-[13px] font-semibold" style={{ color: '#1A2332' }}>{u.count} foto(s) — {u.phase}</p>
-                      <p className="text-[11px]" style={{ color: '#ADB5B7' }}>{u.time}</p>
+                      <p className="text-[11px]" style={{ color: '#ADB5B7' }}>{u.category} · {u.time}</p>
                     </div>
                   </div>
                   <span className="text-[11px] px-2 py-0.5 rounded-md font-bold text-white" style={{ background: u.phase === 'ANTES' ? '#F0A030' : '#2DA194' }}>
