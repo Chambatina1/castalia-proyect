@@ -210,7 +210,7 @@ export async function GET() {
       accountEmail: data.email,
       connectedAt: config.connectedAt,
       lastBackupAt: config.lastBackupAt || null,
-      baseFolder: config.baseFolder || '/Castalia Proyect',
+      baseFolder: config.baseFolder || '/mi barbo',
       hasAppCredentials: !!(config.appKey && config.appSecret),
     });
   } catch {
@@ -238,7 +238,7 @@ export async function POST(request: NextRequest) {
         accountName: config?.accountName,
         accountEmail: config?.accountEmail,
         lastBackupAt: config?.lastBackupAt,
-        baseFolder: config?.baseFolder || '/Castalia Proyect',
+        baseFolder: config?.baseFolder || '/mi barbo',
         appKey: appKey.trim(),
         appSecret: appSecret.trim(),
       };
@@ -279,7 +279,7 @@ export async function POST(request: NextRequest) {
         accountEmail: accountData.email,
       };
       // Use existing baseFolder or default
-      if (!config.baseFolder) config.baseFolder = '/Castalia Proyect';
+      if (!config.baseFolder) config.baseFolder = '/mi barbo';
       await saveConfig(config);
 
       // Create folder structure
@@ -353,7 +353,7 @@ export async function POST(request: NextRequest) {
       }
 
       const projectName = sanitize(project.name);
-      const rootFolder = config.baseFolder?.trim() || '/Castalia Proyect';
+      const rootFolder = config.baseFolder?.trim() || '/mi barbo';
       const baseFolder = `${rootFolder}/${projectName}`;
       await ensureDropboxFolder(config.accessToken, baseFolder);
 
@@ -475,7 +475,7 @@ export async function POST(request: NextRequest) {
       if (!photo) return NextResponse.json({ skipped: true });
 
       const projectName = sanitize(photo.project.name);
-      const rootFolder = config.baseFolder?.trim() || '/Castalia Proyect';
+      const rootFolder = config.baseFolder?.trim() || '/mi barbo';
       const catName = sanitize(subProductName || 'General');
       const phaseFolder = fase === 'antes' ? 'ANTES' : fase === 'despues' ? 'DESPUÉS' : null;
 
@@ -536,7 +536,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Dropbox no conectado' }, { status: 400 });
       }
 
-      const rootFolder = config.baseFolder?.trim() || '/Castalia Proyect';
+      const rootFolder = config.baseFolder?.trim() || '/mi barbo';
       const entries = await listDropboxFolder(config.accessToken, `${rootFolder}/_backups`);
       const backups = entries
         .filter(e => e['.tag'] === 'file' && e.name.endsWith('.json'))
@@ -559,7 +559,7 @@ export async function POST(request: NextRequest) {
 
 async function getBackupFolder(): Promise<string> {
   const config = await loadConfig();
-  return `${config?.baseFolder?.trim() || '/Castalia Proyect'}/_backups`;
+  return `${config?.baseFolder?.trim() || '/mi barbo'}/_backups`;
 }
 
 // ─── Database Backup ───

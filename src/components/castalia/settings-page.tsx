@@ -297,7 +297,7 @@ function DropboxSection() {
   const [accountEmail, setAccountEmail] = useState('')
   const [connecting, setConnecting] = useState(false)
   const [lastBackupAt, setLastBackupAt] = useState<string | null>(null)
-  const [baseFolder, setBaseFolder] = useState('/Castalia Proyect')
+  const [baseFolder, setBaseFolder] = useState('/mi barbo')
   const [savingFolder, setSavingFolder] = useState(false)
 
   // Backup/restore state
@@ -343,7 +343,7 @@ function DropboxSection() {
         setAccountName(data.accountName || '')
         setAccountEmail(data.accountEmail || '')
         setLastBackupAt(data.lastBackupAt || null)
-        setBaseFolder(data.baseFolder || '/Castalia Proyect')
+        setBaseFolder(data.baseFolder || '/mi barbo')
       } else {
         setStatus('disconnected')
       }

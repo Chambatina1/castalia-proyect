@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
       connectedAt: new Date().toISOString(),
       accountName: accountData.name?.display_name,
       accountEmail: accountData.email,
-      baseFolder: existingConfig?.baseFolder || '/Castalia Proyect',
+      baseFolder: existingConfig?.baseFolder || '/mi barbo',
       appKey: appKey,
       appSecret: appSecret,
       lastBackupAt: existingConfig?.lastBackupAt,
