@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, MapPin, Calendar, Image, CheckSquare, MessageSquare, FileText, Clock, Camera, X, ChevronLeft, ChevronRight, Pencil, Trash2, Eraser, Download, Share2, Copy, CheckCircle, ImagePlus, Link2 } from 'lucide-react'
+import { ArrowLeft, MapPin, Calendar, Image, CheckSquare, MessageSquare, FileText, Clock, Camera, X, ChevronLeft, ChevronRight, Pencil, Trash2, Eraser, Download, Share2, Copy, CheckCircle, ImagePlus, Link2, Folder, FolderOpen, Plus } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -62,6 +62,14 @@ export default function ProjectDetailPage() {
   const [shareLink, setShareLink] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
+  // SubProducts (categories)
+  const [subProducts, setSubProducts] = useState<any[]>([])
+  const [selectedSubId, setSelectedSubId] = useState<string | null>(null)
+  const [newSubName, setNewSubName] = useState('')
+  const [showNewSub, setShowNewSub] = useState(false)
+  const [renamingSubId, setRenamingSubId] = useState<string | null>(null)
+  const [renameSubValue, setRenameSubValue] = useState('')
+
   const getTags = (p: ApiPhoto) => { try { return JSON.parse(p.tags || '[]') } catch { return (p.tags || '').split(',').filter(Boolean) } }
   const getPhase = (p: ApiPhoto) => { const t = getTags(p); return t.includes('antes') ? 'antes' : t.includes('despues') ? 'despues' : null }
   const getLocal = (p: ApiPhoto) => { const t = getTags(p); const loc = t.find(t => t.startsWith('local:')); return loc ? loc.replace('local:', '') : null }
@@ -70,19 +78,60 @@ export default function ProjectDetailPage() {
   const beforePhotos = photos.filter(p => getPhase(p) === 'antes')
   const afterPhotos = photos.filter(p => getPhase(p) === 'despues')
 
-  const filteredPhotos = tagFilter === 'ALL'
-    ? photos
-    : tagFilter === 'antes'
-    ? beforePhotos
-    : tagFilter === 'despues'
-    ? afterPhotos
-    : photos.filter(p => getLocal(p) === tagFilter)
+  const filteredPhotos = useMemo(() => {
+    let result = photos
+    if (selectedSubId) {
+      result = result.filter(p => p.subProductId === selectedSubId)
+    }
+    if (!selectedSubId) {
+      if (tagFilter === 'antes') result = beforePhotos
+      else if (tagFilter === 'despues') result = afterPhotos
+      else if (tagFilter !== 'ALL') result = photos.filter(p => getLocal(p) === tagFilter)
+    }
+    return result
+  }, [photos, tagFilter, selectedSubId, beforePhotos, afterPhotos])
 
   const loadPhotos = useCallback(async () => {
     if (!selectedProjectId) return
     const phRes = await fetch(`/api/photos?projectId=${selectedProjectId}`).then(r => r.json())
     if (Array.isArray(phRes?.photos)) setPhotos(phRes.photos.map((p: any) => ({ ...p, uploadedBy: p.uploader })))
   }, [selectedProjectId])
+
+  const loadSubProducts = useCallback(async () => {
+    if (!selectedProjectId) return
+    const res = await fetch(`/api/subproducts?projectId=${selectedProjectId}`).then(r => r.json())
+    if (Array.isArray(res?.subProducts)) setSubProducts(res.subProducts)
+  }, [selectedProjectId])
+
+  const createSubProduct = async () => {
+    if (!selectedProjectId || !newSubName.trim()) return
+    try {
+      const res = await fetch('/api/subproducts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: selectedProjectId, name: newSubName.trim() }) })
+      if (!res.ok) { const e = await res.json(); toast({ title: e.error || 'Error', variant: 'destructive' }); return }
+      const { subProduct } = await res.json()
+      setSubProducts(prev => [...prev, { ...subProduct, _count: { photos: 0 } }])
+      setNewSubName(''); setShowNewSub(false)
+      toast({ title: `"${subProduct.name}" creado` })
+    } catch { toast({ title: 'Error al crear', variant: 'destructive' }) }
+  }
+  const renameSubProduct = async (id: string) => {
+    if (!renameSubValue.trim()) return
+    try {
+      const res = await fetch('/api/subproducts', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, name: renameSubValue.trim() }) })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || `Error ${res.status}`) }
+      setSubProducts(prev => prev.map(s => s.id === id ? { ...s, name: renameSubValue.trim() } : s))
+      setRenamingSubId(null)
+      toast({ title: 'Categoría renombrada' })
+    } catch (err: any) { toast({ title: 'Error al renombrar', description: err?.message || 'Intenta de nuevo', variant: 'destructive' }) }
+  }
+  const deleteSubProduct = async (id: string) => {
+    try {
+      await fetch(`/api/subproducts?id=${id}`, { method: 'DELETE' })
+      setSubProducts(prev => prev.filter(s => s.id !== id))
+      if (selectedSubId === id) setSelectedSubId(null)
+      toast({ title: 'Categoría eliminada' })
+    } catch { toast({ title: 'Error', variant: 'destructive' }) }
+  }
 
   useEffect(() => {
     if (!selectedProjectId) return
@@ -99,6 +148,7 @@ export default function ProjectDetailPage() {
       }
       if (tRes.status === 'fulfilled' && Array.isArray(tRes.value)) setTasks(tRes.value)
       if (aRes.status === 'fulfilled' && Array.isArray(aRes.value)) setActivity(aRes.value)
+      loadSubProducts()
       setLoading(false)
     })
   }, [selectedProjectId])
@@ -411,6 +461,111 @@ export default function ProjectDetailPage() {
 
           {/* Gallery Tab */}
           <TabsContent value="gallery">
+            {/* == CATEGORIES == */
+            {!selectedSubId && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Folder className="w-5 h-5" style={{ color: '#38C5B5' }} />
+                    <h2 className="text-[16px] font-bold" style={{ color: '#1A2332' }}>Categorías</h2>
+                    <Badge variant="secondary" className="text-[11px] px-2 py-0.5" style={{ background: '#F0FDFA', color: '#38C5B5', border: '1px solid #99F6E4' }}>{subProducts.length}</Badge>
+                  </div>
+                  <button onClick={() => setShowNewSub(!showNewSub)} className="h-8 px-3 rounded-lg text-[12px] font-bold border flex items-center gap-1.5 active:bg-gray-50"
+                    style={{ borderColor: '#99F6E4', color: '#38C5B5', background: showNewSub ? '#F0FDFA' : 'white' }}>
+                    <Plus className="w-4 h-4" /> Nueva categoría
+                  </button>
+                </div>
+                {showNewSub && (
+                  <div className="flex gap-2 mb-4 p-4 rounded-xl border" style={{ borderColor: '#99F6E4', background: '#F0FDFA' }}>
+                    <input value={newSubName} onChange={e => setNewSubName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') createSubProduct(); if (e.key === 'Escape') setShowNewSub(false) }}
+                      placeholder="Nombre de la categoría..."
+                      className="flex-1 h-10 px-4 rounded-lg border text-[14px] focus:outline-none" style={{ borderColor: '#99F6E4', color: '#1A2332', background: 'white' }} autoFocus />
+                    <button onClick={createSubProduct} disabled={!newSubName.trim()} className="h-10 px-5 rounded-lg text-[13px] font-bold text-white disabled:opacity-40" style={{ background: '#2DA194' }}>Crear</button>
+                  </div>
+                )}
+                {subProducts.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {subProducts.map((sub, idx) => (
+                      <motion.div key={sub.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.03 }}
+                        className="relative group rounded-xl overflow-hidden border bg-white cursor-pointer active:scale-[0.98] transition-transform"
+                        style={{ borderColor: '#E8EBF0' }}
+                        onClick={() => { setSelectedSubId(sub.id); setTagFilter('ALL') }}>
+                        <div className="aspect-[4/3] overflow-hidden relative" style={{ background: 'linear-gradient(135deg, #F0FDFA, #CCFBF1)' }}>
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                          <div className="absolute bottom-0 left-0 right-0 p-3">
+                            <p className="text-[13px] font-bold text-white truncate">{sub.name}</p>
+                            <p className="text-[10px] text-white/70">{sub._count?.photos || 0} foto{sub._count?.photos !== 1 ? 's' : ''}</p>
+                          </div>
+                        </div>
+                        <div className="absolute top-2 right-2 flex gap-1">
+                          <button onClick={(e) => { e.stopPropagation(); setRenamingSubId(sub.id); setRenameSubValue(sub.name) }}
+                            className="h-7 w-7 rounded-lg flex items-center justify-center bg-white/90 shadow-sm active:bg-[#38C5B5]/80">
+                            <Pencil className="w-3.5 h-3.5" style={{ color: '#5D7380' }} />
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); deleteSubProduct(sub.id) }}
+                            className="h-7 w-7 rounded-lg flex items-center justify-center bg-red-500/90 shadow-sm active:bg-red-600">
+                            <Trash2 className="w-3.5 h-3.5 text-white" />
+                          </button>
+                        </div>
+                        {renamingSubId === sub.id && (
+                          <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center p-3 z-10 gap-2" onClick={e => e.stopPropagation()}>
+                            <input value={renameSubValue} onChange={e => setRenameSubValue(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') renameSubProduct(sub.id); if (e.key === 'Escape') setRenamingSubId(null) }}
+                              className="w-full h-10 px-3 rounded-lg border text-[13px] font-semibold text-center focus:outline-none"
+                              style={{ borderColor: '#38C5B5', color: '#1A2332' }} autoFocus />
+                            <div className="flex gap-2 w-full">
+                              <button onClick={() => renameSubProduct(sub.id)} className="flex-1 h-9 rounded-lg text-[12px] font-bold text-white active:opacity-80" style={{ background: '#38C5B5' }}>Guardar</button>
+                              <button onClick={() => setRenamingSubId(null)} className="flex-1 h-9 rounded-lg text-[12px] font-semibold border active:bg-gray-100" style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>Cancelar</button>
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-16 rounded-2xl border-2 border-dashed" style={{ borderColor: '#E2E6EB' }}>
+                    <FolderOpen className="w-14 h-14 mx-auto mb-3" style={{ color: '#D1D5DB' }} />
+                    <p className="text-[16px] font-bold mb-1" style={{ color: '#35414A' }}>Sin categorías</p>
+                    <p className="text-[13px]" style={{ color: '#ADB5B7' }}>Crea una categoría para organizar las fotos del proyecto</p>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* BREADCRUMB when inside a category */}
+            {selectedSubId && (() => {
+              const sel = subProducts.find(s => s.id === selectedSubId)
+              if (!sel) return null
+              return (
+                <div className="flex items-center gap-2 mb-4">
+                  <button onClick={() => { setSelectedSubId(null); setTagFilter('ALL') }} className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold border transition-colors"
+                    style={{ borderColor: '#E2E6EB', color: '#5D7380', background: '#FAFAFA' }}>
+                    <ChevronLeft className="w-3.5 h-3.5" /> Categorías
+                  </button>
+                  <ChevronRight className="w-3.5 h-3.5" style={{ color: '#ADB5B7' }} />
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <Folder className="w-4 h-4 shrink-0" style={{ color: '#38C5B5' }} />
+                    <span className="text-[14px] font-bold truncate" style={{ color: '#1A2332' }}>{sel.name}</span>
+                    <span className="text-[11px] font-mono shrink-0" style={{ color: '#ADB5B7' }}>({filteredPhotos.length})</span>
+                  </div>
+                  <button onClick={() => { setRenamingSubId(selectedSubId); setRenameSubValue(sel.name) }}
+                    className="h-7 px-2.5 rounded-lg text-[11px] font-semibold border" style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>
+                    <Pencil className="w-3 h-3 inline" /> Renombrar
+                  </button>
+                </div>
+              )
+            })()}
+            {/* Rename input for breadcrumb */}
+            {renamingSubId && selectedSubId && renamingSubId === selectedSubId && (
+              <div className="mb-4 flex gap-2">
+                <input value={renameSubValue} onChange={e => setRenameSubValue(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { renameSubProduct(renamingSubId); } if (e.key === 'Escape') setRenamingSubId(null) }}
+                  className="flex-1 h-10 px-4 rounded-lg border text-[14px] font-semibold focus:outline-none"
+                  style={{ borderColor: '#38C5B5', color: '#1A2332' }} autoFocus />
+                <button onClick={() => { renameSubProduct(renamingSubId); }} className="h-10 px-5 rounded-lg text-[13px] font-bold text-white" style={{ background: '#38C5B5' }}>Guardar</button>
+                <button onClick={() => setRenamingSubId(null)} className="h-10 px-4 rounded-lg text-[13px] font-semibold border" style={{ borderColor: '#E2E6EB', color: '#5D7380' }}>X</button>
+              </div>
+            )}
+
             {/* Filters */}
             <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
               {[{ id: 'ALL', label: 'Todas', color: '#38C5B5' }, { id: 'antes', label: 'ANTES', color: '#F0A030' }, { id: 'despues', label: 'DESPUÉS', color: '#2DA194' }].map(f => (
